@@ -13,6 +13,8 @@ signal world_started(world, index: int)
 
 const GAME_SCENE := "res://scenes/main_hybrid.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
+const SELECT_SCENE := "res://scenes/ui/level_select.tscn"
+const SAVE_PATH := "user://progress.cfg"
 const WorldDefScript := preload("res://scripts/world_def.gd")
 const THEME_FOREST := 0
 const THEME_CAVE := 1
@@ -30,11 +32,16 @@ var state := State.MENU
 var world_index := 0
 var collected := 0
 var total_kills := 0
+## Highest world reached. Everything up to and including this is playable, so
+## testing a later level never means replaying the earlier ones.
+var unlocked := 0
+var cleared: Array = []
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_default_worlds()
+	load_progress()
 
 
 ## Placeholder run until hand-built worlds exist. Each entry is just data, so
@@ -51,6 +58,7 @@ func _build_default_worlds() -> void:
 	forest.theme = THEME_FOREST
 	forest.wave_sizes = [3, 4, 4] as Array[int]
 	forest.size_weights = [0.85, 0.15, 0.0] as Array[float]
+	forest.archetype_weights = [0.75, 0.25, 0.0, 0.0] as Array[float]
 	forest.sky_top = Color(0.42, 0.60, 0.52)
 	forest.sky_horizon = Color(0.74, 0.82, 0.58)
 	forest.ground_horizon = Color(0.20, 0.28, 0.16)
@@ -77,6 +85,7 @@ func _build_default_worlds() -> void:
 	cave.theme = THEME_CAVE
 	cave.wave_sizes = [4, 5, 5] as Array[int]
 	cave.size_weights = [0.6, 0.35, 0.05] as Array[float]
+	cave.archetype_weights = [0.40, 0.35, 0.25, 0.0] as Array[float]
 	cave.sky_top = Color(0.72, 0.84, 0.96)
 	cave.sky_horizon = Color(0.80, 0.86, 0.94)
 	cave.ground_horizon = Color(0.55, 0.56, 0.58)
@@ -103,6 +112,7 @@ func _build_default_worlds() -> void:
 	ocean.theme = THEME_OCEAN
 	ocean.wave_sizes = [4, 5, 6] as Array[int]
 	ocean.size_weights = [0.5, 0.38, 0.12] as Array[float]
+	ocean.archetype_weights = [0.25, 0.35, 0.28, 0.12] as Array[float]
 	ocean.sky_top = Color(0.62, 0.66, 0.68)
 	ocean.sky_horizon = Color(0.86, 0.80, 0.68)
 	ocean.ground_horizon = Color(0.52, 0.50, 0.44)
@@ -129,6 +139,7 @@ func _build_default_worlds() -> void:
 	night.theme = THEME_NIGHT
 	night.wave_sizes = [4, 6, 7] as Array[int]
 	night.size_weights = [0.4, 0.4, 0.2] as Array[float]
+	night.archetype_weights = [0.15, 0.30, 0.30, 0.25] as Array[float]
 	night.sky_top = Color(0.04, 0.05, 0.10)
 	night.sky_horizon = Color(0.10, 0.11, 0.20)
 	night.ground_horizon = Color(0.05, 0.05, 0.08)
@@ -172,10 +183,55 @@ func _set_state(s: State) -> void:
 
 
 func start_run() -> void:
-	world_index = 0
-	collected = 0
 	total_kills = 0
+	to_select()
+
+
+## Jump straight into any unlocked world.
+func start_world(index: int) -> void:
+	if index > unlocked:
+		return
+	world_index = clampi(index, 0, worlds.size() - 1)
+	collected = 0
 	_enter_world()
+
+
+func to_select() -> void:
+	get_tree().paused = false
+	_set_state(State.MENU)
+	get_tree().change_scene_to_file(SELECT_SCENE)
+
+
+func is_cleared(index: int) -> bool:
+	return index in cleared
+
+
+func _mark_cleared(index: int) -> void:
+	if not index in cleared:
+		cleared.append(index)
+	unlocked = maxi(unlocked, mini(index + 1, worlds.size() - 1))
+	save_progress()
+
+
+func save_progress() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("progress", "unlocked", unlocked)
+	cfg.set_value("progress", "cleared", cleared)
+	cfg.save(SAVE_PATH)
+
+
+func load_progress() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) != OK:
+		return
+	unlocked = int(cfg.get_value("progress", "unlocked", 0))
+	cleared = cfg.get_value("progress", "cleared", [])
+
+
+func reset_progress() -> void:
+	unlocked = 0
+	cleared = []
+	save_progress()
 
 
 func _enter_world() -> void:
@@ -198,6 +254,7 @@ func add_drop(amount := 1) -> bool:
 	collected = mini(collected + amount, needed())
 	collected_changed.emit(collected, needed())
 	if collected >= needed():
+		_mark_cleared(world_index)
 		if is_last_world():
 			_set_state(State.VICTORY)
 		else:

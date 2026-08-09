@@ -27,6 +27,11 @@ func _ready() -> void:
 	_check("menu state", Game.state == Game.State.MENU)
 
 	Game.start_run()
+	await _wait(50)
+	await _shot("ui-01b-select")
+	_check("select screen", Game.state == Game.State.MENU)
+
+	Game.start_world(0)
 	await _wait(90)
 	await _shot("ui-02-world1")
 	_check("playing", Game.state == Game.State.PLAYING)

@@ -84,7 +84,8 @@ func _start_next_wave() -> void:
 
 func _spawn() -> void:
 	var e: CharacterBody3D = enemy_scene.instantiate()
-	e.set_tier(_roll_tier())
+	e.set_archetype(_roll_weighted(_world_weights("archetype_weights")))
+	e.set_tier(_roll_weighted(_world_weights("size_weights")))
 	add_child(e)
 	e.player = player
 	var a := randf() * TAU
@@ -94,10 +95,16 @@ func _spawn() -> void:
 	_alive += 1
 
 
-## Weighted pick across the 1x / 2x / 4x tiers, from the world's own weights.
-func _roll_tier() -> int:
+func _world_weights(prop: String) -> Array:
 	var w: Resource = Game.current_world()
-	var weights: Array = w.size_weights if w and not w.size_weights.is_empty() else [1.0, 0.0, 0.0]
+	if w == null:
+		return [1.0]
+	var arr: Array = w.get(prop)
+	return arr if not arr.is_empty() else [1.0]
+
+
+## Weighted pick over an arbitrary weight array.
+func _roll_weighted(weights: Array) -> int:
 	var total := 0.0
 	for x in weights:
 		total += float(x)

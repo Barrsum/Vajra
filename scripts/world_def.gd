@@ -28,6 +28,8 @@ class_name WorldDef
 @export var drop_per_kill := 1
 ## Chance an enemy spawns at each size tier: [1x, 2x, 4x]. Normalised on use.
 @export var size_weights: Array[float] = [0.7, 0.25, 0.05]
+## Chance of each behaviour archetype: [Husk, Stalker, Ravager, Juggernaut].
+@export var archetype_weights: Array[float] = [1.0, 0.0, 0.0, 0.0]
 
 @export_group("Mood")
 @export var sky_top := Color(0.30, 0.33, 0.42)

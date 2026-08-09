@@ -87,14 +87,14 @@ func _on_state(s: int) -> void:
 		Game.State.WORLD_CLEAR:
 			var w: Resource = Game.current_world()
 			_open("COLLECTED", "%d %s secured.\nOne more stop." % [w.ingredient_needed, w.ingredient],
-				"NEXT WORLD", Game.next_world, "", Callable(), "MAIN MENU", Game.to_menu)
+				"NEXT WORLD", Game.next_world, "LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu)
 		Game.State.VICTORY:
 			_open("SHOPPING DONE",
 				"Everything on the list.\nTime to go home.",
-				"MAIN MENU", Game.to_menu, "", Callable(), "", Callable())
+				"LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu, "", Callable())
 		Game.State.DEAD:
 			_open("SCRAPPED", "She is going to be furious.",
-				"RETRY WORLD", Game.retry_world, "", Callable(), "MAIN MENU", Game.to_menu)
+				"RETRY WORLD", Game.retry_world, "LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu)
 
 
 func _open(title: String, message: String,

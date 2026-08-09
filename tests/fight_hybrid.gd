@@ -16,6 +16,8 @@ func _ready() -> void:
 	# bypasses Game.start_run(), so declare the state by hand.
 	Game.state = Game.State.PLAYING
 	Game.collected = 0
+	# Night: every archetype and every size tier in the mix.
+	Game.world_index = 3
 	var world := MAIN.instantiate()
 	add_child(world)
 	await get_tree().process_frame
@@ -71,6 +73,14 @@ func _ready() -> void:
 	print("  kills       : %d" % kills)
 	print("  player hp   : %.0f / %.0f" % [player.health, player.max_health])
 	print("  enemies left: %d" % _enemies().size())
+	var seen := {}
+	var tiers := {}
+	for e in get_tree().get_nodes_in_group("enemies"):
+		var a: String = e.ARCHETYPES[e.archetype]["name"]
+		seen[a] = int(seen.get(a, 0)) + 1
+		tiers[e.tier] = int(tiers.get(e.tier, 0)) + 1
+	print("  archetypes  : %s" % seen)
+	print("  size tiers  : %s" % tiers)
 	var ok := kills > 0
 	print("")
 	print("  %s" % ("KILLS REGISTER" if ok else "*** NO KILLS ***"))

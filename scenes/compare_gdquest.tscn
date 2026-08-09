@@ -1,0 +1,55 @@
+[gd_scene load_steps=8 format=3]
+
+; GDQuest's complete third-person controller, unmodified, running in our street.
+; Side-by-side reference against scenes/main.tscn to judge which feels better.
+
+[ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="2_gdplayer"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.3, 0.33, 0.42, 1)
+sky_horizon_color = Color(0.95, 0.6, 0.31, 1)
+sky_curve = 0.18
+ground_bottom_color = Color(0.12, 0.1, 0.09, 1)
+ground_horizon_color = Color(0.42, 0.28, 0.19, 1)
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.9
+tonemap_mode = 3
+tonemap_exposure = 1.05
+ssao_enabled = true
+glow_enabled = true
+glow_intensity = 0.65
+fog_enabled = true
+fog_light_color = Color(0.72, 0.44, 0.26, 1)
+fog_density = 0.016
+fog_sky_affect = 0.35
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.028
+volumetric_fog_emission = Color(0.25, 0.16, 0.1, 1)
+
+[sub_resource type="Environment" id="EnvUnused"]
+
+[node name="CompareGdquest" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.83, 0.42, -0.37, 0, 0.66, 0.75, 0.56, -0.62, 0.55, 0, 30, 0)
+light_color = Color(1, 0.72, 0.44, 1)
+light_energy = 2.2
+shadow_enabled = true
+directional_shadow_max_distance = 80.0
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("1_world")
+
+[node name="Player" parent="." instance=ExtResource("2_gdplayer")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 8)

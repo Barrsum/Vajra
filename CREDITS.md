@@ -13,6 +13,7 @@ so the rule is simply: **add the row when you add the file.**
 | Mutant | Enemy mesh + rig | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Mutant animation set (8 clips) | Enemy idle, walk, run, roar, attacks, death | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Godot Engine 4.7.1 | Engine | godotengine.org | MIT | 2026-08-09 |
+| GDQuest TPS controller | Four techniques reimplemented, not copied: ground-height camera decoupling, last-strong-direction facing, variable jump height, stopping-speed snap | [gdquest-demos/godot-4-3d-third-person-controller](https://github.com/gdquest-demos/godot-4-3d-third-person-controller) | MIT (source) | 2026-08-09 |
 
 ## Everything else is original
 

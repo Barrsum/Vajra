@@ -35,6 +35,10 @@ func _ready() -> void:
 	await _check_jump()
 
 	print("")
+	print("--- variable jump height ---")
+	await _check_variable_jump()
+
+	print("")
 	print("--- dodge ---")
 	await _check_dodge()
 
@@ -91,6 +95,33 @@ func _check_jump() -> void:
 	if not ok:
 		failures += 1
 	print("  apex +%.2fm, returned to ground: %s  %s" % [rose, landed, "PASS" if ok else "FAIL"])
+
+
+## Holding jump must clear noticeably more height than tapping it.
+func _check_variable_jump() -> void:
+	var tap := await _jump_apex(1)
+	var hold := await _jump_apex(45)
+	var ok := hold > tap * 1.15
+	if not ok:
+		failures += 1
+	print("  tap %.2fm  vs  hold %.2fm   (+%.0f%%)  %s" % [
+		tap, hold, (hold / maxf(tap, 0.01) - 1.0) * 100.0, "PASS" if ok else "FAIL",
+	])
+
+
+func _jump_apex(hold_frames: int) -> float:
+	await _settle(60)
+	var y0 := player.global_position.y
+	Input.action_press("jump")
+	var peak := y0
+	for i in 60:
+		await get_tree().physics_frame
+		if i == hold_frames:
+			Input.action_release("jump")
+		peak = maxf(peak, player.global_position.y)
+	Input.action_release("jump")
+	await _settle(70)
+	return peak - y0
 
 
 func _check_dodge() -> void:

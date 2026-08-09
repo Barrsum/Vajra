@@ -13,9 +13,15 @@ extends CharacterBody3D
 @export var acceleration := 42.0
 @export var deceleration := 34.0
 @export var turn_speed := 14.0
+## Below this speed with no input, velocity is snapped to zero rather than
+## crawling toward it — otherwise the character drifts imperceptibly forever.
+@export var stopping_speed := 0.8
 
 @export_group("Air")
 @export var jump_velocity := 7.0
+## Extra lift while the jump button is held and you are still rising. Tap for a
+## short hop, hold for a full one. (Technique from GDQuest's TPS controller, MIT.)
+@export var jump_hold_force := 9.0
 @export var gravity := 20.0
 @export var fall_multiplier := 1.45   ## heavier on the way down; a floaty arc reads as weightless
 @export var coyote_time := 0.12       ## grace window to still jump just after walking off an edge
@@ -100,6 +106,16 @@ var _morph_played := false
 
 var _step_accum := 0.0           ## distance travelled since the last footstep
 
+## Ground level beneath the player. The camera rig tracks this rather than the
+## player's own Y, so jumping does not bounce the view. Borrowed from GDQuest's
+## third-person controller, and it is the single biggest camera improvement here.
+var _ground_height := 0.0
+var _ground_ray: RayCast3D
+
+## Orientation follows the last *committed* direction, not instantaneous
+## velocity — otherwise the character spins on the spot as velocity decays.
+var _last_strong_dir := Vector3.FORWARD
+
 # --- state ------------------------------------------------------------------
 var yaw := 0.0
 var pitch := -0.24
@@ -125,6 +141,16 @@ func _ready() -> void:
 	_sm = anim_tree.get("parameters/playback")
 	health = max_health
 	_build_blade()
+
+	# Downward probe for the camera's ground reference.
+	_ground_ray = RayCast3D.new()
+	_ground_ray.target_position = Vector3(0, -8.0, 0)
+	_ground_ray.collision_mask = 1
+	add_child(_ground_ray)
+	_ground_height = global_position.y
+
+	# Detach the camera rig from the body so it never inherits jump motion.
+	cam_root.top_level = true
 
 
 ## Grows a blade off the forearm bone via BoneAttachment3D. Built in code rather
@@ -293,7 +319,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
-	_update_camera_rig()
+	_update_camera_rig(delta)
 	_update_ground_state(delta)
 
 	if Input.is_action_just_pressed("dodge"):
@@ -328,7 +354,21 @@ func _physics_process(delta: float) -> void:
 
 # ---------------------------------------------------------------------------
 
-func _update_camera_rig() -> void:
+func _update_camera_rig(delta: float) -> void:
+	if _ground_ray.is_colliding():
+		_ground_height = _ground_ray.get_collision_point().y
+	else:
+		_ground_height = global_position.y - 8.0
+	# Never let the reference sit above the player, or dropping off a ledge
+	# would push the camera up.
+	_ground_height = minf(_ground_height, global_position.y)
+
+	# Horizontal follows the body exactly; vertical eases toward ground level.
+	var want_y := _ground_height + 1.5
+	cam_root.global_position = Vector3(
+		global_position.x,
+		lerpf(cam_root.global_position.y, want_y, 1.0 - exp(-9.0 * delta)),
+		global_position.z)
 	cam_root.rotation.y = yaw
 	spring.rotation.x = pitch
 
@@ -379,6 +419,14 @@ func _process_walk(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, target.x, rate * delta)
 	velocity.z = move_toward(velocity.z, target.z, rate * delta)
 
+	# Snap the last sliver of speed away instead of crawling toward zero.
+	if wish == Vector3.ZERO and Vector2(velocity.x, velocity.z).length() < stopping_speed:
+		velocity.x = 0.0
+		velocity.z = 0.0
+
+	if wish.length() > 0.2:
+		_last_strong_dir = wish
+
 
 func _process_vertical(delta: float) -> void:
 	if _buffered_jump > 0.0 and _coyote > 0.0 and not _dodging:
@@ -388,6 +436,10 @@ func _process_vertical(delta: float) -> void:
 		return
 
 	if not is_on_floor():
+		# Holding jump while still rising extends the arc — tap for a short hop,
+		# hold for the full height. Costs one line and it is felt immediately.
+		if Input.is_action_pressed("jump") and velocity.y > 0.0:
+			velocity.y += jump_hold_force * delta
 		# Falling faster than rising gives the arc weight without a bigger gravity.
 		var g := gravity * (fall_multiplier if velocity.y < 0.0 else 1.0)
 		velocity.y -= g * delta
@@ -429,10 +481,12 @@ func _process_dodge(delta: float) -> void:
 
 
 func _face_travel_direction(delta: float) -> void:
-	var flat := Vector3(velocity.x, 0.0, velocity.z)
-	if flat.length_squared() < 0.4:
+	# Orient to the last committed input direction rather than to current
+	# velocity. Velocity decays through tiny, noisy values as you stop, which
+	# makes a velocity-facing character twitch on the spot.
+	if Vector3(velocity.x, 0.0, velocity.z).length_squared() < 0.4:
 		return
-	var want := atan2(flat.x, flat.z)
+	var want := atan2(_last_strong_dir.x, _last_strong_dir.z)
 	visual.rotation.y = lerp_angle(visual.rotation.y, want, 1.0 - exp(-turn_speed * delta))
 
 

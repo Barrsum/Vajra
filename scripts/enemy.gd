@@ -111,9 +111,6 @@ var _mats: Array[StandardMaterial3D] = []
 var _accent := Color(0.35, 1.0, 0.75)
 var _body_col := Color(0.30, 0.13, 0.16)
 
-var _bar_fg: MeshInstance3D
-var _bar_root: Node3D
-const BAR_W := 1.2
 
 
 ## Both must be called before the node enters the tree.
@@ -151,7 +148,6 @@ func _ready() -> void:
 	add_to_group("enemies")
 	scale = Vector3.ONE * float(TIERS[tier]["scale"])
 	_collect_materials(model)
-	_build_health_bar()
 
 
 func _collect_materials(n: Node) -> void:
@@ -168,65 +164,6 @@ func _collect_materials(n: Node) -> void:
 			_mats.append(m)
 	for c in n.get_children():
 		_collect_materials(c)
-
-
-# --- health bar -------------------------------------------------------------
-
-func _build_health_bar() -> void:
-	_bar_root = Node3D.new()
-	add_child(_bar_root)
-	_bar_root.position = Vector3(0, 2.35, 0)
-
-	# Border, then the empty track, then the fill. Three layers so the bar has a
-	# defined edge instead of floating.
-	var border := MeshInstance3D.new()
-	var brm := QuadMesh.new()
-	brm.size = Vector2(BAR_W + 0.06, 0.20)
-	border.mesh = brm
-	border.material_override = _bar_mat(Color(0.02, 0.02, 0.02, 0.9))
-	_bar_root.add_child(border)
-
-	var bg := MeshInstance3D.new()
-	var bgm := QuadMesh.new()
-	bgm.size = Vector2(BAR_W, 0.14)
-	bg.mesh = bgm
-	bg.material_override = _bar_mat(Color(0.22, 0.22, 0.24, 0.9))
-	bg.position.z = 0.005
-	_bar_root.add_child(bg)
-
-	_bar_fg = MeshInstance3D.new()
-	var fgm := QuadMesh.new()
-	fgm.size = Vector2(BAR_W, 0.14)
-	_bar_fg.mesh = fgm
-	_bar_fg.material_override = _bar_mat(Color(0.30, 0.90, 0.35, 1.0))
-	_bar_fg.position.z = 0.012
-	_bar_root.add_child(_bar_fg)
-
-
-func _bar_mat(c: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = c
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.disable_receive_shadows = true
-	return m
-
-
-func _update_health_bar() -> void:
-	if _bar_fg == null:
-		return
-	var frac := clampf(health / maxf(max_health, 0.001), 0.0, 1.0)
-	_bar_fg.scale.x = maxf(frac, 0.001)
-	_bar_fg.position.x = -(1.0 - frac) * BAR_W * 0.5
-	var m: StandardMaterial3D = _bar_fg.material_override
-	# Green -> yellow over the top half, yellow -> red over the bottom half.
-	# A single lerp across the whole range never reads as "yellow at half".
-	const GREEN := Color(0.30, 0.90, 0.35)
-	const YELLOW := Color(0.96, 0.84, 0.20)
-	const RED := Color(0.94, 0.20, 0.16)
-	m.albedo_color = YELLOW.lerp(GREEN, (frac - 0.5) * 2.0) if frac > 0.5 		else RED.lerp(YELLOW, frac * 2.0)
-	_bar_root.visible = state != State.DEAD
 
 
 # --- brain ------------------------------------------------------------------
@@ -246,7 +183,6 @@ func _physics_process(delta: float) -> void:
 
 	if state == State.DEAD:
 		_apply_materials()
-		_update_health_bar()
 		return
 
 	var to_player: Vector3 = player.global_position - global_position
@@ -348,7 +284,6 @@ func _physics_process(delta: float) -> void:
 	_separate()
 	_update_animation()
 	_apply_materials()
-	_update_health_bar()
 
 
 ## A short sprint while closing. Rare, brief, and the single biggest source of
@@ -429,7 +364,6 @@ func take_damage(amount: float, from: Vector3, knockback: float) -> void:
 		return
 	health -= amount
 	_flash = 1.0
-	_update_health_bar()
 
 	var dir := global_position - from
 	dir.y = 0.0

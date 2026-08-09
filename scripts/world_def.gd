@@ -47,6 +47,16 @@ class_name WorldDef
 @export var sun_angles := Vector3(-50.0, 35.0, 0.0)
 @export var ambient_energy := 1.0
 @export var glow_intensity := 0.65
+## Blends distant geometry into the fog colour. The single biggest contributor
+## to a scene reading as one place rather than objects on a backdrop.
+@export_range(0.0, 1.0) var aerial_perspective := 0.65
+## Ground haze. Height is where it starts thinning out.
+@export var fog_height := 8.0
+@export var fog_height_density := 0.06
+@export_group("Grading")
+@export var brightness := 1.0
+@export var contrast := 1.06
+@export var saturation := 1.04
 
 @export_group("Terrain")
 @export var ground_color := Color(0.31, 0.28, 0.25)

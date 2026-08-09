@@ -15,6 +15,7 @@ extends CanvasLayer
 @onready var _b1: Button = %Button1
 @onready var _b2: Button = %Button2
 @onready var _b3: Button = %Button3
+@onready var _b4: Button = %Button4
 
 var player: Node = null
 var _banner_t := 0.0
@@ -47,7 +48,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_release_mouse"):
+	if event.is_action_pressed("pause") or event.is_action_pressed("ui_release_mouse"):
 		if Game.state == Game.State.PLAYING or Game.state == Game.State.PAUSED:
 			Game.toggle_pause()
 			get_viewport().set_input_as_handled()
@@ -87,23 +88,45 @@ func _on_state(s: int) -> void:
 			_overlay.visible = false
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		Game.State.PAUSED:
-			_open("PAUSED", "", "RESUME", Game.toggle_pause,
-				"RESTART WORLD", Game.retry_world, "MAIN MENU", Game.to_menu)
+			_open("PAUSED", _mission_text(), [
+				["RESUME", Game.toggle_pause],
+				["RESTART WORLD", Game.retry_world],
+				["LEVEL SELECT", Game.to_select],
+				["MAIN MENU", Game.to_menu]])
 		Game.State.WORLD_CLEAR:
 			var w: Resource = Game.current_world()
-			_open("COLLECTED", "%d %s secured.\nOne more stop." % [w.ingredient_needed, w.ingredient],
-				"NEXT WORLD", Game.next_world, "LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu)
+			_open("COLLECTED", "%d %s secured.
+One more stop." % [w.ingredient_needed, w.ingredient], [
+				["NEXT WORLD", Game.next_world],
+				["LEVEL SELECT", Game.to_select],
+				["MAIN MENU", Game.to_menu]])
 		Game.State.VICTORY:
-			_open("SHOPPING DONE",
-				"Everything on the list.\nTime to go home.",
-				"LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu, "", Callable())
+			_open("SHOPPING DONE", "Everything on the list.
+Time to go home.", [
+				["LEVEL SELECT", Game.to_select],
+				["MAIN MENU", Game.to_menu]])
 		Game.State.DEAD:
-			_open("SCRAPPED", "She is going to be furious.",
-				"RETRY WORLD", Game.retry_world, "LEVEL SELECT", Game.to_select, "MAIN MENU", Game.to_menu)
+			_open("SCRAPPED", "She is going to be furious.", [
+				["RETRY WORLD", Game.retry_world],
+				["LEVEL SELECT", Game.to_select],
+				["MAIN MENU", Game.to_menu]])
 
 
-func _open(title: String, message: String,
-		l1: String, c1: Callable, l2: String, c2: Callable, l3: String, c3: Callable) -> void:
+## The pause screen doubles as the objective board — what you are here for, how
+## far along you are, and which world it is.
+func _mission_text() -> String:
+	var w: Resource = Game.current_world()
+	if w == null:
+		return ""
+	return "MISSION  %d / %d   %s
+%s
+
+COLLECT  %s   %d / %d" % [
+		Game.world_index + 1, Game.worlds.size(), w.display_name, w.subtitle,
+		w.ingredient, Game.collected, w.ingredient_needed]
+
+
+func _open(title: String, message: String, buttons: Array) -> void:
 	_overlay.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	# Kill any world-intro banner, or it reads through the dim behind the title.
@@ -112,9 +135,13 @@ func _open(title: String, message: String,
 	_title.text = title
 	_msg.text = message
 	_msg.visible = message != ""
-	_wire(_b1, l1, c1)
-	_wire(_b2, l2, c2)
-	_wire(_b3, l3, c3)
+
+	var slots := [_b1, _b2, _b3, _b4]
+	for i in slots.size():
+		if i < buttons.size():
+			_wire(slots[i], buttons[i][0], buttons[i][1])
+		else:
+			_wire(slots[i], "", Callable())
 	if _b1.visible:
 		_b1.grab_focus()
 

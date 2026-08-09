@@ -57,11 +57,40 @@ func build() -> void:
 
 # --- helpers ----------------------------------------------------------------
 
+## One shared noise texture, triplanar-mapped onto roughness. Flat roughness is
+## what makes untextured boxes read as plastic; breaking it up costs nothing and
+## gives every surface some grain.
+static var _noise_tex: NoiseTexture2D = null
+
+func _noise() -> NoiseTexture2D:
+	if _noise_tex == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+		n.frequency = 0.035
+		n.fractal_octaves = 3
+		var t := NoiseTexture2D.new()
+		t.width = 256
+		t.height = 256
+		t.seamless = true
+		t.noise = n
+		# Roughness textures MULTIPLY, so raw noise averaging 0.5 halves roughness
+		# and turns terrain glossy. Remap into 0.72-1.0: visible grain, still matte.
+		var grad := Gradient.new()
+		grad.set_color(0, Color(0.72, 0.72, 0.72))
+		grad.set_color(1, Color(1.0, 1.0, 1.0))
+		t.color_ramp = grad
+		_noise_tex = t
+	return _noise_tex
+
+
 func _mat(c: Color, rough := 0.92, metal := 0.0, emit := 0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
 	m.roughness = rough
 	m.metallic = metal
+	m.roughness_texture = _noise()
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3(0.09, 0.09, 0.09)
 	if emit > 0.0:
 		m.emission_enabled = true
 		m.emission = c

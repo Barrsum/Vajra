@@ -122,6 +122,71 @@ func death_burst(pos: Vector3) -> void:
 		Color(0.45, 1.0, 0.72), 8.0, 0.6, 1.5)
 
 
+## A pillar of light marking something arriving. `intensity` scales the whole
+## effect, so the same call can read as a footnote or an event:
+##   0.45  a minor arrival
+##   1.0   a real threat
+##   1.8   something you should be worried about
+func spawn_portal(pos: Vector3, color: Color, intensity := 1.0) -> void:
+	var root := Node3D.new()
+	add_child(root)
+	root.global_position = pos
+
+	var beam_mat := StandardMaterial3D.new()
+	beam_mat.albedo_color = Color(color.r, color.g, color.b, 0.55)
+	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam_mat.disable_receive_shadows = true
+
+	var beam := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 1.1 * intensity
+	cm.bottom_radius = 1.5 * intensity
+	cm.height = 14.0 * intensity
+	cm.radial_segments = 16
+	beam.mesh = cm
+	beam.material_override = beam_mat
+	beam.position.y = cm.height * 0.5
+	root.add_child(beam)
+
+	# Ground ring, so the landing point is unambiguous.
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.4 * intensity
+	tm.outer_radius = 1.9 * intensity
+	ring.mesh = tm
+	ring.material_override = beam_mat
+	ring.position.y = 0.1
+	root.add_child(ring)
+
+	var lamp := OmniLight3D.new()
+	lamp.light_color = color
+	lamp.light_energy = 9.0 * intensity
+	lamp.omni_range = 16.0 * intensity
+	lamp.position.y = 2.0
+	root.add_child(lamp)
+
+	_emit(pos + Vector3.UP * 0.4, int(26 * intensity), Vector3.UP, 22.0,
+		5.0 * intensity, 12.0 * intensity, 0.9, color, 4.0, 0.5, 1.6 * intensity)
+
+	# Snap open, then drain away. The asymmetry is what makes it read as an
+	# arrival rather than a fade-in.
+	beam.scale = Vector3(0.15, 0.2, 0.15)
+	ring.scale = Vector3(0.3, 1.0, 0.3)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(beam, "scale", Vector3(1.0, 1.0, 1.0), 0.18)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ring, "scale", Vector3(1.6, 1.0, 1.6), 0.35)\
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_property(beam_mat, "albedo_color:a", 0.0, 0.75)
+	tw.parallel().tween_property(lamp, "light_energy", 0.0, 0.75)
+	tw.parallel().tween_property(beam, "scale", Vector3(0.4, 1.3, 0.4), 0.75)
+	tw.chain().tween_callback(root.queue_free)
+
+
 ## The arm blade materialising.
 func morph(pos: Vector3) -> void:
 	_emit(pos, 26, Vector3.UP, 140.0,

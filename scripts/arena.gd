@@ -18,7 +18,7 @@ const RAVAGER := 2
 const JUGGERNAUT := 3
 
 @export var enemy_scene: PackedScene
-@export var spawn_radius := 12.0
+@export var spawn_radius := 7.5
 @export var wave_break := 2.0
 @export var max_alive := 7
 
@@ -78,6 +78,16 @@ func _apply_mood() -> void:
 	env.glow_intensity = w.glow_intensity
 	env.ambient_light_energy = w.ambient_energy
 
+	# Aerial perspective ties distant geometry to the fog; height fog puts haze
+	# on the ground. Together they do most of the work of making a scene cohere.
+	env.fog_aerial_perspective = w.aerial_perspective
+	env.fog_height = w.fog_height
+	env.fog_height_density = w.fog_height_density
+	env.adjustment_enabled = true
+	env.adjustment_brightness = w.brightness
+	env.adjustment_contrast = w.contrast
+	env.adjustment_saturation = w.saturation
+
 	var sun := $Sun as DirectionalLight3D
 	sun.light_color = w.sun_color
 	sun.light_energy = w.sun_energy
@@ -123,21 +133,21 @@ func _run_beat(b: int) -> void:
 		1:
 			ui.show_message("SOMETHING BIGGER NOTICED YOU")
 			await _delay(0.8)
-			_guardian = _spawn_near(HUSK, 1, 16.0)
+			_guardian = _spawn_near(HUSK, 1, 11.0, 1.0)
 		2:
 			ui.show_message("THE SMALL ONES ANSWER")
 			for i in 5:
 				await _delay(0.30)
-				_spawn_near(HUSK if i % 3 else STALKER, 0)
+				_spawn_near(HUSK if i % 3 else STALKER, 0, 0.0, 0.45)
 		3:
 			ui.show_message("THE BIG ONES PROTECT THEIR OWN")
 			await _delay(0.5)
 			# Placed downrange and in view, so you see them coming.
-			_spawn_in_view(JUGGERNAUT, 1, 30.0, -7.0)
+			_spawn_in_view(JUGGERNAUT, 1, 19.0, -5.0, 1.8)
 			await _delay(0.4)
-			_spawn_in_view(JUGGERNAUT, 1, 32.0, 7.0)
+			_spawn_in_view(JUGGERNAUT, 1, 21.0, 5.0, 1.8)
 			await _delay(0.4)
-			_spawn_in_view(STALKER, 0, 26.0, 0.0)
+			_spawn_in_view(STALKER, 0, 16.0, 0.0, 1.8)
 	_beat_locked = false
 
 
@@ -192,17 +202,26 @@ func _make(archetype: int, tier: int) -> CharacterBody3D:
 
 
 ## Ring spawn around the player.
-func _spawn_near(archetype: int, tier: int, radius := 0.0) -> CharacterBody3D:
+func _spawn_near(archetype: int, tier: int, radius := 0.0, glow := 0.0) -> CharacterBody3D:
 	var e := _make(archetype, tier)
 	var a := randf() * TAU
-	var r := (radius if radius > 0.0 else spawn_radius + randf() * 5.0)
+	var r := (radius if radius > 0.0 else spawn_radius + randf() * 3.0)
 	e.global_position = player.global_position + Vector3(sin(a) * r, 0.6, cos(a) * r)
+	if glow > 0.0:
+		Vfx.spawn_portal(e.global_position, _portal_color(archetype), glow)
 	return e
+
+
+## Arrivals borrow the archetype's own accent, so the colour of the light tells
+## you what is coming before you can see it.
+func _portal_color(archetype: int) -> Color:
+	return EnemyScript.ARCHETYPES[archetype]["accent"]
 
 
 ## Downrange and inside the player's view, so an arrival can be seen rather than
 ## simply appearing behind them.
-func _spawn_in_view(archetype: int, tier: int, distance: float, side: float) -> CharacterBody3D:
+func _spawn_in_view(archetype: int, tier: int, distance: float, side: float,
+		glow := 0.0) -> CharacterBody3D:
 	var e := _make(archetype, tier)
 	var cam := player.get_node_or_null("CameraController")
 	var fwd := Vector3.FORWARD
@@ -215,6 +234,8 @@ func _spawn_in_view(archetype: int, tier: int, distance: float, side: float) -> 
 	fwd = fwd.normalized()
 	var right := Vector3(-fwd.z, 0.0, fwd.x)
 	e.global_position = player.global_position + fwd * distance + right * side + Vector3.UP * 0.6
+	if glow > 0.0:
+		Vfx.spawn_portal(e.global_position, _portal_color(archetype), glow)
 	return e
 
 

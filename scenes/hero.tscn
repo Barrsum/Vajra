@@ -1,13 +1,19 @@
 [gd_scene load_steps=9 format=3]
 
-; GDQuest's camera rig node-for-node (transforms copied verbatim — the feel
-; lives in these numbers), carrying our Y Bot skin and combat script.
+; VAJRA hero.
+;   Movement + camera rig : GDQuest TPS controller (MIT), transforms verbatim
+;   Character + animations: Quaternius Universal Animation Library (CC0)
+;   Combat, blade, trail  : ours
+;
+; The whole animation set comes from one animator on one rig, which is what
+; makes the attacks chain cleanly. Bone names are Unreal-style, so the arm
+; blade attaches to "lowerarm_r" rather than Mixamo's "mixamorig_RightForeArm".
 
 [ext_resource type="Script" path="res://scripts/hero.gd" id="1_hero"]
 [ext_resource type="Script" path="res://player/camera_controller.gd" id="2_cam"]
-[ext_resource type="PackedScene" path="res://assets/character/ybot.fbx" id="3_model"]
-[ext_resource type="AnimationLibrary" path="res://assets/character/player_anims.res" id="4_anims"]
-[ext_resource type="AnimationNodeStateMachine" path="res://assets/character/player_tree.tres" id="5_tree"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/Universal_Animation_LibraryStandard/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb" id="3_model"]
+[ext_resource type="AnimationLibrary" path="res://assets/quaternius/hero_anims.res" id="4_anims"]
+[ext_resource type="AnimationNodeStateMachine" path="res://assets/quaternius/hero_tree.tres" id="5_tree"]
 
 [sub_resource type="CapsuleShape3D" id="ShapeBody"]
 radius = 0.35
@@ -24,16 +30,14 @@ radius = 0.4
 collision_layer = 2
 collision_mask = 1
 script = ExtResource("1_hero")
+blade_bone = "lowerarm_r"
+blade_offset = Vector3(0, 0.26, 0)
 
 [node name="CharacterCollisionShape" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("ShapeBody")
 
 [node name="CameraController" type="Node3D" parent="."]
-; top_level detaches the rig from the body — the script positions it itself.
-; The tilt limits MUST be overridden: the script's defaults are (-60, 60) and it
-; calls clamp(x, lower, upper), which with those values pins pitch to +60 and
-; aims the camera at the sky.
 top_level = true
 script = ExtResource("2_cam")
 invert_mouse_y = true

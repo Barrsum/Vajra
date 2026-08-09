@@ -41,6 +41,13 @@ extends CharacterBody3D
 @export var attack_cancel_at := 0.62
 @export var target_assist_angle := 1.15
 
+@export_group("Look")
+## The UAL character ships untextured — pure white albedo, which blows out
+## completely under the scene's glow. Overriding it is not decoration, it is
+## the difference between a character and a light source.
+@export var body_color := Color(0.30, 0.33, 0.40)
+@export var body_roughness := 0.85
+
 @export_group("Arm blade")
 @export var blade_bone := "mixamorig_RightForeArm"
 @export var blade_offset := Vector3(0.0, 0.22, 0.0)
@@ -109,7 +116,22 @@ func _ready() -> void:
 	health = max_health
 	_sm = anim_tree.get("parameters/playback")
 	_camera_controller.setup(self)
+	_style_model(model)
 	_build_blade()
+
+
+func _style_model(n: Node) -> void:
+	if n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		if mi.mesh:
+			var m := StandardMaterial3D.new()
+			m.albedo_color = body_color
+			m.roughness = body_roughness
+			m.metallic = 0.0
+			for s in mi.mesh.get_surface_count():
+				mi.set_surface_override_material(s, m)
+	for c in n.get_children():
+		_style_model(c)
 
 
 func _process(delta: float) -> void:

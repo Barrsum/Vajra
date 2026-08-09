@@ -14,6 +14,9 @@ so the rule is simply: **add the row when you add the file.**
 | Mutant animation set (8 clips) | Enemy idle, walk, run, roar, attacks, death | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Godot Engine 4.7.1 | Engine | godotengine.org | MIT | 2026-08-09 |
 | GDQuest TPS controller | Four techniques reimplemented, not copied: ground-height camera decoupling, last-strong-direction facing, variable jump height, stopping-speed snap | [gdquest-demos/godot-4-3d-third-person-controller](https://github.com/gdquest-demos/godot-4-3d-third-person-controller) | MIT (source) | 2026-08-09 |
+| GDQuest player system | Copied verbatim into `res://player/` — camera controller, model, animation tree, shaders. Used whole in `compare_gdquest.tscn`; the camera rig is reused in `hero.tscn` | same as above | MIT (source) | 2026-08-09 |
+| Universal Animation Library (Standard) | **Hero character mesh + all 13 player animations.** Single rig, single animator — this is what fixed the animation jank | [Quaternius](https://quaternius.com/packs/universalanimationlibrary.html) | **CC0** | 2026-08-09 |
+| RPG Animations GLB FREE | Downloaded, 67 clips on a different rig (`B_Pelvis` vs `pelvis`). Not yet used — needs retargeting | [Explosive LLC, Godot Asset Store](https://store.godotengine.org/asset/explosive-llc/rpg-character-animations-pack-free/) | MIT | 2026-08-09 |
 
 ## Everything else is original
 

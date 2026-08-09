@@ -14,6 +14,11 @@ signal world_started(world, index: int)
 const GAME_SCENE := "res://scenes/main_hybrid.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 const WorldDefScript := preload("res://scripts/world_def.gd")
+const THEME_FOREST := 0
+const THEME_CAVE := 1
+const THEME_OCEAN := 2
+const THEME_NIGHT := 3
+const THEME_STREET := 4
 
 ## The run. Replace or extend this as hand-built worlds arrive — nothing else
 ## needs to know how many there are.
@@ -32,28 +37,114 @@ func _ready() -> void:
 	_build_default_worlds()
 
 
-## Placeholder run until hand-built worlds exist. Each entry is just data.
+## Placeholder run until hand-built worlds exist. Each entry is just data, so
+## replacing one with a real level later touches nothing else.
 func _build_default_worlds() -> void:
-	var defs := [
-		["SECTOR SEVEN", "the shopping list starts here", "SCRAP MEAT", 10,
-			Color(0.95, 0.60, 0.31), Color(0.72, 0.44, 0.26)],
-		["THE UNDERPASS", "she said it grows in the dark", "RUST BLOOM", 14,
-			Color(0.42, 0.36, 0.62), Color(0.28, 0.24, 0.42)],
-		["COOLANT FLATS", "bring a container", "GEL SAC", 16,
-			Color(0.36, 0.72, 0.70), Color(0.24, 0.46, 0.48)],
-		["THE FOUNDRY", "last item. then dinner.", "CORE SHARD", 20,
-			Color(0.92, 0.34, 0.24), Color(0.52, 0.18, 0.14)],
-	]
-	for d in defs:
-		var w: Resource = WorldDefScript.new()
-		w.display_name = d[0]
-		w.subtitle = d[1]
-		w.ingredient = d[2]
-		w.ingredient_needed = d[3]
-		w.sky_horizon = d[4]
-		w.fog_color = d[5]
-		w.wave_sizes = [3, 4, 5] as Array[int]
-		worlds.append(w)
+	worlds.clear()
+
+	# 1 — fenced forest. Soft, green, low contrast: the tutorial ground.
+	var forest: Resource = WorldDefScript.new()
+	forest.display_name = "THE THICKET"
+	forest.subtitle = "she wants it fresh"
+	forest.ingredient = "SAP GLAND"
+	forest.ingredient_needed = 10
+	forest.theme = THEME_FOREST
+	forest.wave_sizes = [3, 4, 4] as Array[int]
+	forest.size_weights = [0.85, 0.15, 0.0] as Array[float]
+	forest.sky_top = Color(0.42, 0.60, 0.52)
+	forest.sky_horizon = Color(0.74, 0.82, 0.58)
+	forest.ground_horizon = Color(0.20, 0.28, 0.16)
+	forest.fog_color = Color(0.48, 0.62, 0.42)
+	forest.fog_density = 0.010
+	forest.volumetric_density = 0.014
+	forest.sun_color = Color(0.92, 1.0, 0.82)
+	forest.sun_energy = 1.5
+	forest.sun_angles = Vector3(-58.0, 28.0, 0.0)
+	forest.ambient_energy = 1.1
+	forest.glow_intensity = 0.30
+	forest.ground_color = Color(0.20, 0.30, 0.16)
+	forest.prop_color = Color(0.34, 0.33, 0.26)
+	forest.accent_color = Color(0.24, 0.52, 0.22)
+	forest.arena_size = 110.0
+	worlds.append(forest)
+
+	# 2 — cave mouth under an open, near-white sky.
+	var cave: Resource = WorldDefScript.new()
+	cave.display_name = "THE OPEN MOUTH"
+	cave.subtitle = "mind the drop"
+	cave.ingredient = "STONE MARROW"
+	cave.ingredient_needed = 14
+	cave.theme = THEME_CAVE
+	cave.wave_sizes = [4, 5, 5] as Array[int]
+	cave.size_weights = [0.6, 0.35, 0.05] as Array[float]
+	cave.sky_top = Color(0.72, 0.84, 0.96)
+	cave.sky_horizon = Color(0.80, 0.86, 0.94)
+	cave.ground_horizon = Color(0.55, 0.56, 0.58)
+	cave.fog_color = Color(0.82, 0.87, 0.93)
+	cave.fog_density = 0.006
+	cave.volumetric_density = 0.010
+	cave.sun_color = Color(1.0, 0.98, 0.94)
+	cave.sun_energy = 1.75
+	cave.sun_angles = Vector3(-72.0, 10.0, 0.0)
+	cave.ambient_energy = 1.0
+	cave.glow_intensity = 0.35
+	cave.ground_color = Color(0.33, 0.33, 0.34)
+	cave.prop_color = Color(0.33, 0.31, 0.30)
+	cave.accent_color = Color(0.52, 0.58, 0.62)
+	cave.arena_size = 120.0
+	worlds.append(cave)
+
+	# 3 — dusty shallows. Hazy, washed out, water underfoot.
+	var ocean: Resource = WorldDefScript.new()
+	ocean.display_name = "THE DUST SHALLOWS"
+	ocean.subtitle = "bring a container"
+	ocean.ingredient = "GEL SAC"
+	ocean.ingredient_needed = 16
+	ocean.theme = THEME_OCEAN
+	ocean.wave_sizes = [4, 5, 6] as Array[int]
+	ocean.size_weights = [0.5, 0.38, 0.12] as Array[float]
+	ocean.sky_top = Color(0.62, 0.66, 0.68)
+	ocean.sky_horizon = Color(0.86, 0.80, 0.68)
+	ocean.ground_horizon = Color(0.52, 0.50, 0.44)
+	ocean.fog_color = Color(0.74, 0.72, 0.63)
+	ocean.fog_density = 0.014
+	ocean.volumetric_density = 0.034
+	ocean.sun_color = Color(1.0, 0.94, 0.80)
+	ocean.sun_energy = 1.45
+	ocean.sun_angles = Vector3(-38.0, 55.0, 0.0)
+	ocean.ambient_energy = 0.9
+	ocean.glow_intensity = 0.50
+	ocean.ground_color = Color(0.40, 0.38, 0.33)
+	ocean.prop_color = Color(0.38, 0.37, 0.34)
+	ocean.accent_color = Color(0.35, 0.55, 0.58)
+	ocean.arena_size = 130.0
+	worlds.append(ocean)
+
+	# 4 — night. Dark, lamp-lit, and the only world where the big ones are common.
+	var night: Resource = WorldDefScript.new()
+	night.display_name = "THE LONG NIGHT"
+	night.subtitle = "last item. then dinner."
+	night.ingredient = "CORE SHARD"
+	night.ingredient_needed = 18
+	night.theme = THEME_NIGHT
+	night.wave_sizes = [4, 6, 7] as Array[int]
+	night.size_weights = [0.4, 0.4, 0.2] as Array[float]
+	night.sky_top = Color(0.04, 0.05, 0.10)
+	night.sky_horizon = Color(0.10, 0.11, 0.20)
+	night.ground_horizon = Color(0.05, 0.05, 0.08)
+	night.fog_color = Color(0.10, 0.12, 0.22)
+	night.fog_density = 0.016
+	night.volumetric_density = 0.028
+	night.sun_color = Color(0.42, 0.52, 0.85)
+	night.sun_energy = 0.55
+	night.sun_angles = Vector3(-30.0, 200.0, 0.0)
+	night.ambient_energy = 0.85
+	night.glow_intensity = 0.95
+	night.ground_color = Color(0.15, 0.15, 0.19)
+	night.prop_color = Color(0.24, 0.24, 0.29)
+	night.accent_color = Color(1.0, 0.62, 0.28)
+	night.arena_size = 115.0
+	worlds.append(night)
 
 
 # --- queries ----------------------------------------------------------------

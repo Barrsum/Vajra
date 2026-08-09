@@ -31,6 +31,20 @@ static var _tokens := MAX_TOKENS
 @export var knockback_scale := 1.0
 @export var turn_speed := 8.0
 
+## Size tiers. Bigger ones hit harder and shrug off knockback, but move slower
+## and telegraph longer — so they read as a different threat, not just more HP.
+const TIERS := [
+	{"name": "", "scale": 1.0, "hp": 1.0, "dmg": 1.0, "speed": 1.0,
+	 "reach": 1.0, "tele": 1.0, "knock": 1.0, "drops": 1},
+	{"name": "BRUTE", "scale": 1.9, "hp": 3.2, "dmg": 1.9, "speed": 0.82,
+	 "reach": 1.55, "tele": 1.25, "knock": 0.42, "drops": 2},
+	{"name": "COLOSSUS", "scale": 3.6, "hp": 9.0, "dmg": 3.2, "speed": 0.62,
+	 "reach": 2.4, "tele": 1.5, "knock": 0.15, "drops": 4},
+]
+
+var tier := 0
+var drops := 1
+
 @onready var visual: Node3D = $Visual
 @onready var model: Node3D = $Visual/Model
 @onready var anim_tree: AnimationTree = $Visual/AnimationTree
@@ -49,6 +63,23 @@ var _anim_state := ""
 var _mats: Array[StandardMaterial3D] = []
 
 var player: Node3D
+var _bar_fg: MeshInstance3D
+var _bar_root: Node3D
+const BAR_W := 1.2
+
+
+## Must be called before the node enters the tree, so stats are already scaled
+## by the time _ready runs.
+func set_tier(t: int) -> void:
+	tier = clampi(t, 0, TIERS.size() - 1)
+	var d: Dictionary = TIERS[tier]
+	max_health *= d["hp"]
+	damage *= d["dmg"]
+	move_speed *= d["speed"]
+	reach *= d["reach"]
+	telegraph_time *= d["tele"]
+	knockback_scale *= d["knock"]
+	drops = d["drops"]
 
 
 func _ready() -> void:
@@ -56,7 +87,9 @@ func _ready() -> void:
 	_circle_side = 1.0 if randf() < 0.5 else -1.0
 	_sm = anim_tree.get("parameters/playback")
 	add_to_group("enemies")
+	scale = Vector3.ONE * float(TIERS[tier]["scale"])
 	_collect_materials(model)
+	_build_health_bar()
 
 
 func _collect_materials(n: Node) -> void:
@@ -76,6 +109,54 @@ func _collect_materials(n: Node) -> void:
 		_collect_materials(c)
 
 
+## Floating bar. Billboarded and unshaded so it reads at any angle and in the
+## dark level, where a lit bar would simply vanish.
+func _build_health_bar() -> void:
+	_bar_root = Node3D.new()
+	add_child(_bar_root)
+	# Placed in local space, so the tier scale lifts it clear of bigger bodies.
+	_bar_root.position = Vector3(0, 2.35, 0)
+
+	var bg := MeshInstance3D.new()
+	var bgm := QuadMesh.new()
+	bgm.size = Vector2(BAR_W, 0.14)
+	bg.mesh = bgm
+	bg.material_override = _bar_mat(Color(0.05, 0.03, 0.04, 0.85))
+	_bar_root.add_child(bg)
+
+	_bar_fg = MeshInstance3D.new()
+	var fgm := QuadMesh.new()
+	fgm.size = Vector2(BAR_W, 0.14)
+	_bar_fg.mesh = fgm
+	_bar_fg.material_override = _bar_mat(Color(1.0, 0.30, 0.22, 1.0))
+	_bar_fg.position.z = 0.01
+	_bar_root.add_child(_bar_fg)
+
+
+func _bar_mat(c: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.no_depth_test = false
+	m.disable_receive_shadows = true
+	return m
+
+
+func _update_health_bar() -> void:
+	if _bar_fg == null:
+		return
+	var frac := clampf(health / maxf(max_health, 0.001), 0.0, 1.0)
+	# Shrink from the right by scaling and shifting half the lost width.
+	_bar_fg.scale.x = maxf(frac, 0.001)
+	_bar_fg.position.x = -(1.0 - frac) * BAR_W * 0.5
+	var m: StandardMaterial3D = _bar_fg.material_override
+	m.albedo_color = Color(1.0, 0.30, 0.22).lerp(Color(1.0, 0.85, 0.35), 1.0 - frac)
+	var vis := state != State.DEAD
+	_bar_root.visible = vis
+
+
 func _physics_process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
@@ -85,6 +166,7 @@ func _physics_process(delta: float) -> void:
 
 	if state == State.DEAD:
 		_apply_materials()
+		_update_health_bar()
 		return
 
 	var to_player: Vector3 = player.global_position - global_position
@@ -169,6 +251,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_animation()
 	_apply_materials()
+	_update_health_bar()
 
 
 func _set_state(s: State) -> void:
@@ -203,6 +286,7 @@ func take_damage(amount: float, from: Vector3, knockback: float) -> void:
 		return
 	health -= amount
 	_flash = 1.0
+	_update_health_bar()
 
 	var dir := global_position - from
 	dir.y = 0.0

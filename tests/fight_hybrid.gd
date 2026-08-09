@@ -35,7 +35,9 @@ func _ready() -> void:
 		return
 	await _shot("hy-01-approach")
 
-	var start_hp := _hp()
+	# Waves top up continuously now, so total enemy HP is no longer a valid
+	# progress metric — it rises as reinforcements arrive. Count kills.
+	var start_kills: int = Game.total_kills
 	var swings := 0
 
 	for i in 110:
@@ -64,14 +66,14 @@ func _ready() -> void:
 			break
 
 	await _shot("hy-03-after")
-	var end_hp := _hp()
+	var kills: int = Game.total_kills - start_kills
 	print("  swings      : %d" % swings)
-	print("  enemy hp    : %.0f -> %.0f  (dealt %.0f)" % [start_hp, end_hp, start_hp - end_hp])
+	print("  kills       : %d" % kills)
 	print("  player hp   : %.0f / %.0f" % [player.health, player.max_health])
 	print("  enemies left: %d" % _enemies().size())
-	var ok := (start_hp - end_hp) > 0.0
+	var ok := kills > 0
 	print("")
-	print("  %s" % ("DAMAGE LANDS" if ok else "*** NO DAMAGE ***"))
+	print("  %s" % ("KILLS REGISTER" if ok else "*** NO KILLS ***"))
 	print("")
 	get_tree().quit(0 if ok else 1)
 

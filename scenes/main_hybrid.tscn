@@ -1,0 +1,115 @@
+[gd_scene format=3 uid="uid://bdxuygy4kxufj"]
+
+[ext_resource type="PackedScene" path="res://scenes/hero.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scripts/arena.gd" id="2_arena"]
+[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="3_enemy"]
+[ext_resource type="Script" path="res://scripts/world.gd" id="4_world"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.30, 0.33, 0.42, 1)
+sky_horizon_color = Color(0.95, 0.60, 0.31, 1)
+sky_curve = 0.18
+ground_bottom_color = Color(0.12, 0.1, 0.09, 1)
+ground_horizon_color = Color(0.42, 0.28, 0.19, 1)
+sun_angle_max = 12.0
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.9
+tonemap_mode = 3
+tonemap_exposure = 1.05
+ssao_enabled = true
+ssao_intensity = 1.4
+glow_enabled = true
+glow_intensity = 0.65
+glow_bloom = 0.12
+fog_enabled = true
+fog_light_color = Color(0.72, 0.44, 0.26, 1)
+fog_density = 0.016
+fog_sky_affect = 0.35
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.028
+volumetric_fog_emission = Color(0.25, 0.16, 0.1, 1)
+
+[sub_resource type="BoxMesh" id="MeshGround"]
+size = Vector3(120, 1, 120)
+
+[sub_resource type="StandardMaterial3D" id="MatGround"]
+albedo_color = Color(0.31, 0.28, 0.25, 1)
+roughness = 0.95
+
+[sub_resource type="BoxShape3D" id="ShapeGround"]
+size = Vector3(120, 1, 120)
+
+[sub_resource type="BoxMesh" id="MeshBlock"]
+size = Vector3(3, 3, 3)
+
+[sub_resource type="StandardMaterial3D" id="MatBlock"]
+albedo_color = Color(0.55, 0.47, 0.38, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="ShapeBlock"]
+size = Vector3(3, 3, 3)
+
+[node name="Main" type="Node3D" unique_id=1756083790]
+script = ExtResource("2_arena")
+enemy_scene = ExtResource("3_enemy")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=82309566]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=2032445011]
+transform = Transform3D(0.83, 0.42, -0.37, 0, 0.66, 0.75, 0.56, -0.62, 0.55, 0, 30, 0)
+light_color = Color(1, 0.72, 0.44, 1)
+light_energy = 2.2
+shadow_enabled = true
+directional_shadow_max_distance = 80.0
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("4_world")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 8)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Margin" type="MarginContainer" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 26
+theme_override_constants/margin_top = 20
+
+[node name="Rows" type="VBoxContainer" parent="HUD/Margin"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 6
+
+[node name="Health" type="Label" parent="HUD/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.72, 0.42, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 26
+text = "HP"
+
+[node name="Wave" type="Label" parent="HUD/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.85)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+text = "WAVE"
+
+[node name="Hint" type="Label" parent="HUD/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.45)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 14
+text = "hint"

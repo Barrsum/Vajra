@@ -1,0 +1,16 @@
+# Godot's import cache and editor state. Regenerated on open; never commit.
+.godot/
+
+# Export output
+/build/
+/export/
+export_presets.cfg
+
+# Test artifacts
+shots/
+*.log
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store

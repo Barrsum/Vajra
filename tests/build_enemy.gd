@@ -1,0 +1,217 @@
+extends Node
+## Builds the enemy animation library and state machine.
+##
+## No idle clip was downloaded for the Mutant, so it borrows the player's
+## Breathing Idle. Both rigs use Mixamo's bone naming, but the Mutant has 37
+## bones to Y Bot's 65 (no fingers) — so tracks targeting bones the Mutant does
+## not have are dropped. That is retargeting in miniature, and it is the reason
+## sticking to one skeleton family keeps paying off.
+##
+## Run: godot --headless --path . res://tests/build_enemy.tscn
+
+const SRC := "res://assets/enemy/anims/"
+const MODEL := "res://assets/enemy/Mutant.fbx"
+const IDLE_DONOR := "res://assets/character/anims/Breathing Idle.fbx"
+const LIB_OUT := "res://assets/enemy/enemy_anims.res"
+const TREE_OUT := "res://assets/enemy/enemy_tree.tres"
+
+# stem -> [clip, loop, speed]
+#
+# One coherent set. Mixing a zombie shamble with a mutant punch and a human idle
+# gave the creature three different body languages at once — which reads as
+# "wrong" long before you can point at any single clip.
+const MAP := {
+	"Mutant Breathing Idle": ["idle", true, 1.0],
+	"Mutant Walking": ["walk", true, 1.0],
+	"Mutant Run": ["run", true, 1.0],
+	# The roar runs 5.4s raw — far longer than any wind-up you'd want to stand
+	# through. Compressed to about a second so the whole beat lands.
+	"Mutant Roaring": ["telegraph", false, 5.0],
+	"Mutant Punch": ["attack1", false, 1.3],
+	"Mutant Swiping": ["attack2", false, 3.0],
+	"Standing React Large From Front": ["hit", false, 1.5],
+	"Mutant Dying": ["death", false, 1.5],
+}
+
+const STATES := ["telegraph", "attack1", "attack2", "hit", "death"]
+
+## Blend points are measured from each clip's own root motion, so the stride
+## matches the speed it plays at.
+var walk_speed := 1.2
+var run_speed := 3.4
+
+
+func _ready() -> void:
+	print("")
+	print("=== building enemy ===")
+
+	var bones := _bone_set(MODEL)
+	print("  target rig: %d bones" % bones.size())
+
+	var lib := AnimationLibrary.new()
+
+	for stem in MAP:
+		var path: String = SRC + String(stem) + ".fbx"
+		if not ResourceLoader.exists(path):
+			print("  MISSING  %s" % path)
+			continue
+		var anim := _extract(path)
+		if anim == null:
+			continue
+
+		var clip: String = MAP[stem][0]
+		var loop: bool = MAP[stem][1]
+		var speed: float = MAP[stem][2]
+
+		anim.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
+		var drift := _strip_root_motion(anim)
+		if anim.length > 0.0 and drift > 0.05:
+			var authored := drift / anim.length
+			if clip == "walk":
+				walk_speed = authored
+			elif clip == "run":
+				run_speed = authored
+		_time_scale(anim, speed)
+		_filter_tracks(anim, bones)
+
+		lib.add_animation(clip, anim)
+		print("  %-8s <- %-32s %5.2fs (x%.2f) rootmotion=%.2fm" % [
+			clip, String(stem), anim.length, speed, drift,
+		])
+
+	# Fallback only. Now that a real Mutant idle exists this is skipped — but it
+	# stays as the pattern for any future creature that ships without one.
+	var idle := _extract(IDLE_DONOR) if not lib.has_animation("idle") else null
+	if idle:
+		idle.loop_mode = Animation.LOOP_LINEAR
+		_strip_root_motion(idle)
+		var removed := _filter_tracks(idle, bones)
+		lib.add_animation("idle", idle)
+		print("  %-8s <- %-32s %5.2fs (borrowed, %d tracks dropped)" % [
+			"idle", "player Breathing Idle", idle.length, removed,
+		])
+
+	var e1 := ResourceSaver.save(lib, LIB_OUT)
+	print("  library -> %s  %s" % [LIB_OUT, "ok" if e1 == OK else "FAILED"])
+
+	# --- state machine ---
+	var sm := AnimationNodeStateMachine.new()
+	var bs := AnimationNodeBlendSpace1D.new()
+	bs.min_space = 0.0
+	bs.max_space = maxf(run_speed, walk_speed + 0.5)
+	bs.add_blend_point(_clip("idle"), 0.0, -1, "idle")
+	bs.add_blend_point(_clip("walk"), maxf(walk_speed, 0.4), -1, "walk")
+	bs.add_blend_point(_clip("run"), maxf(run_speed, walk_speed + 0.5), -1, "run")
+	sm.add_node("locomotion", bs, Vector2(320, 40))
+	print("  blend space: idle@0.0  walk@%.2f  run@%.2f  (measured)" % [walk_speed, run_speed])
+
+	var x := 60
+	for s in STATES:
+		sm.add_node(s, _clip(s), Vector2(x, 220))
+		x += 220
+
+	sm.add_transition("Start", "locomotion", _t(0.0))
+	var all := STATES.duplicate()
+	all.append("locomotion")
+	var n := 0
+	for from in all:
+		if from == "death":
+			continue
+		for to in all:
+			if from != to:
+				sm.add_transition(from, to, _t(0.12))
+				n += 1
+	print("  transitions: %d" % n)
+
+	var e2 := ResourceSaver.save(sm, TREE_OUT)
+	print("  tree    -> %s  %s" % [TREE_OUT, "ok" if e2 == OK else "FAILED"])
+	print("")
+	get_tree().quit(0 if e1 == OK and e2 == OK else 1)
+
+
+func _bone_set(model_path: String) -> Dictionary:
+	var out := {}
+	var scene: Node = (load(model_path) as PackedScene).instantiate()
+	var skel := _find(scene, "Skeleton3D") as Skeleton3D
+	if skel:
+		for i in skel.get_bone_count():
+			out[skel.get_bone_name(i)] = true
+	scene.free()
+	return out
+
+
+func _extract(path: String) -> Animation:
+	var scene: Node = (load(path) as PackedScene).instantiate()
+	var ap := _find(scene, "AnimationPlayer") as AnimationPlayer
+	var out: Animation = null
+	if ap and ap.has_animation("mixamo_com"):
+		out = ap.get_animation("mixamo_com").duplicate(true)
+	scene.free()
+	return out
+
+
+## Drops tracks aimed at bones this rig does not have. Returns how many.
+func _filter_tracks(anim: Animation, bones: Dictionary) -> int:
+	var removed := 0
+	for i in range(anim.get_track_count() - 1, -1, -1):
+		var p := String(anim.track_get_path(i))
+		if not p.contains(":"):
+			continue
+		var bone := p.get_slice(":", 1)
+		if bone != "" and not bones.has(bone):
+			anim.remove_track(i)
+			removed += 1
+	return removed
+
+
+func _strip_root_motion(anim: Animation) -> float:
+	for i in anim.get_track_count():
+		if anim.track_get_type(i) != Animation.TYPE_POSITION_3D:
+			continue
+		if not String(anim.track_get_path(i)).ends_with("Hips"):
+			continue
+		var n := anim.track_get_key_count(i)
+		if n == 0:
+			return 0.0
+		var first: Vector3 = anim.track_get_key_value(i, 0)
+		var last: Vector3 = anim.track_get_key_value(i, n - 1)
+		var drift := Vector2(last.x - first.x, last.z - first.z).length()
+		for k in n:
+			var v: Vector3 = anim.track_get_key_value(i, k)
+			anim.track_set_key_value(i, k, Vector3(first.x, v.y, first.z))
+		return drift
+	return 0.0
+
+
+func _time_scale(anim: Animation, speed: float) -> void:
+	if is_equal_approx(speed, 1.0):
+		return
+	var inv := 1.0 / speed
+	for i in anim.get_track_count():
+		for k in anim.track_get_key_count(i):
+			anim.track_set_key_time(i, k, anim.track_get_key_time(i, k) * inv)
+	anim.length *= inv
+
+
+func _clip(name: String) -> AnimationNodeAnimation:
+	var n := AnimationNodeAnimation.new()
+	n.animation = name
+	return n
+
+
+func _t(xfade: float) -> AnimationNodeStateMachineTransition:
+	var t := AnimationNodeStateMachineTransition.new()
+	t.xfade_time = xfade
+	t.switch_mode = AnimationNodeStateMachineTransition.SWITCH_MODE_IMMEDIATE
+	t.advance_mode = AnimationNodeStateMachineTransition.ADVANCE_MODE_ENABLED
+	return t
+
+
+func _find(n: Node, cls: String) -> Node:
+	if n.get_class() == cls:
+		return n
+	for c in n.get_children():
+		var r := _find(c, cls)
+		if r:
+			return r
+	return null

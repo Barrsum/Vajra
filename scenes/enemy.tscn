@@ -10,8 +10,10 @@ radius = 0.45
 height = 1.85
 
 [node name="Enemy" type="CharacterBody3D"]
+; Mask 5 = world (1) + other enemies (4). Without the 4 they walk
+; straight through one another and a crowd becomes one blob.
 collision_layer = 4
-collision_mask = 1
+collision_mask = 5
 script = ExtResource("1_enemy")
 
 [node name="Collision" type="CollisionShape3D" parent="."]

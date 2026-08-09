@@ -41,7 +41,8 @@ func _ready() -> void:
 	_check("medium found", med != null)
 	if med:
 		med.take_damage(med.max_health * 0.86, med.global_position + Vector3.FORWARD, 0.0)
-	await _wait(140)
+	# Beat 2 staggers five spawns over 1.5s, and the scene is heavier now.
+	await _wait(240)
 	a = _tally()
 	_dump("beat2", a)
 	_check("beat 2: 5 more small", a["t0"] >= 6)

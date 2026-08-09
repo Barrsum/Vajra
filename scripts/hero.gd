@@ -420,6 +420,12 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	add_trauma(0.55)
 	hit_stop(0.05)
 	Sfx.play_at(&"hurt", global_position + Vector3.UP)
+	# Taking a hit cancels your swing. Trading blows should never be free — this
+	# is what makes their attacks feel like an interruption rather than chip.
+	_attack_index = 0
+	_attack_timer = 0.0
+	_attack_buffered = false
+	_travel("hit")
 	if health <= 0.0:
 		alive = false
 

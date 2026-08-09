@@ -177,19 +177,29 @@ func _build_health_bar() -> void:
 	add_child(_bar_root)
 	_bar_root.position = Vector3(0, 2.35, 0)
 
+	# Border, then the empty track, then the fill. Three layers so the bar has a
+	# defined edge instead of floating.
+	var border := MeshInstance3D.new()
+	var brm := QuadMesh.new()
+	brm.size = Vector2(BAR_W + 0.06, 0.20)
+	border.mesh = brm
+	border.material_override = _bar_mat(Color(0.02, 0.02, 0.02, 0.9))
+	_bar_root.add_child(border)
+
 	var bg := MeshInstance3D.new()
 	var bgm := QuadMesh.new()
 	bgm.size = Vector2(BAR_W, 0.14)
 	bg.mesh = bgm
-	bg.material_override = _bar_mat(Color(0.05, 0.03, 0.04, 0.85))
+	bg.material_override = _bar_mat(Color(0.22, 0.22, 0.24, 0.9))
+	bg.position.z = 0.005
 	_bar_root.add_child(bg)
 
 	_bar_fg = MeshInstance3D.new()
 	var fgm := QuadMesh.new()
 	fgm.size = Vector2(BAR_W, 0.14)
 	_bar_fg.mesh = fgm
-	_bar_fg.material_override = _bar_mat(Color(1.0, 0.30, 0.22, 1.0))
-	_bar_fg.position.z = 0.01
+	_bar_fg.material_override = _bar_mat(Color(0.30, 0.90, 0.35, 1.0))
+	_bar_fg.position.z = 0.012
 	_bar_root.add_child(_bar_fg)
 
 
@@ -210,7 +220,12 @@ func _update_health_bar() -> void:
 	_bar_fg.scale.x = maxf(frac, 0.001)
 	_bar_fg.position.x = -(1.0 - frac) * BAR_W * 0.5
 	var m: StandardMaterial3D = _bar_fg.material_override
-	m.albedo_color = Color(1.0, 0.30, 0.22).lerp(Color(1.0, 0.85, 0.35), 1.0 - frac)
+	# Green -> yellow over the top half, yellow -> red over the bottom half.
+	# A single lerp across the whole range never reads as "yellow at half".
+	const GREEN := Color(0.30, 0.90, 0.35)
+	const YELLOW := Color(0.96, 0.84, 0.20)
+	const RED := Color(0.94, 0.20, 0.16)
+	m.albedo_color = YELLOW.lerp(GREEN, (frac - 0.5) * 2.0) if frac > 0.5 		else RED.lerp(YELLOW, frac * 2.0)
 	_bar_root.visible = state != State.DEAD
 
 
@@ -330,6 +345,7 @@ func _physics_process(delta: float) -> void:
 		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
 		visual.rotation.y = _facing
 
+	_separate()
 	_update_animation()
 	_apply_materials()
 	_update_health_bar()
@@ -337,6 +353,23 @@ func _physics_process(delta: float) -> void:
 
 ## A short sprint while closing. Rare, brief, and the single biggest source of
 ## tension — distance stops being reliable safety.
+## Physical collision stops overlap, but a crowd pressing on one point can lock
+## up. A soft outward nudge keeps them shuffling instead of jamming.
+func _separate() -> void:
+	var my_r: float = 0.5 * float(TIERS[tier]["scale"])
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not other.is_alive():
+			continue
+		var d: Vector3 = global_position - other.global_position
+		d.y = 0.0
+		var dist := d.length()
+		var min_d: float = my_r + 0.5 * float(TIERS[other.tier]["scale"])
+		if dist > 0.001 and dist < min_d:
+			# Heavier things shove lighter things, not the other way round.
+			var push: float = (min_d - dist) * 3.0 * (1.0 if tier <= other.tier else 0.35)
+			velocity += d.normalized() * push
+
+
 func _maybe_burst(dist: float) -> void:
 	if _burst_cd > 0.0 or _burst_t > 0.0:
 		return
@@ -364,6 +397,12 @@ func _set_state(s: State) -> void:
 func _take_token() -> bool:
 	if _has_token:
 		return true
+	# Anything above the smallest tier ignores the queue entirely. They are slow
+	# and telegraph for a long time, so they stay readable — and it fixes the
+	# guardians, who could be starved of tokens forever in a crowded fight.
+	if tier >= 1:
+		_has_token = true
+		return true
 	if _tokens <= 0:
 		return false
 	_tokens -= 1
@@ -372,8 +411,10 @@ func _take_token() -> bool:
 
 
 func _release_token() -> void:
-	if _has_token:
-		_has_token = false
+	if not _has_token:
+		return
+	_has_token = false
+	if tier == 0:
 		_tokens = mini(_tokens + 1, MAX_TOKENS)
 
 
@@ -420,6 +461,10 @@ func _die() -> void:
 	_travel("death")
 	Sfx.play_at(&"death", global_position + Vector3.UP * 1.2)
 	Vfx.death_burst(global_position + Vector3.UP * 1.1)
+	# Only the heavy ones kick up ground dust, and far less than their arrival
+	# did — a small one dying should not be an event.
+	if tier >= 1:
+		Vfx.dust(global_position + Vector3.UP * 0.15, 10 * tier)
 	var tw := create_tween()
 	tw.tween_interval(2.6)
 	tw.tween_property(self, "position:y", position.y - 2.2, 1.4)

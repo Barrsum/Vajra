@@ -1,12 +1,21 @@
 extends Node3D
-## Spawns waves for whichever world the run is currently in.
+## Spawns for whichever world the run is in.
 ##
-## Knows nothing about progression — it spawns, reports kills to Game, and keeps
-## going until Game says the world is complete. That separation is what lets a
-## hand-built world be dropped in later without touching this file.
+## Two modes. Worlds marked `scripted` run a hand-authored beat sequence, so the
+## opening level can teach the fight in a fixed order. Everything else uses the
+## generic wave loop, which stays random on purpose.
+##
+## Either way this knows nothing about progression — it spawns, drops, and lets
+## Game decide when the quota is met.
 
 const EnemyScript := preload("res://scripts/enemy.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
+
+# Archetype ids, matching Enemy.ARCHETYPES.
+const HUSK := 0
+const STALKER := 1
+const RAVAGER := 2
+const JUGGERNAUT := 3
 
 @export var enemy_scene: PackedScene
 @export var spawn_radius := 12.0
@@ -20,11 +29,31 @@ var _wave := -1
 var _alive := 0
 var _spawning := false
 
+# --- scripted mode ---
+var _scripted := false
+var _beat := 0
+var _kills := 0
+var _guardian: Node = null      ## the first medium; beat 2 waits on its health
+var _beat_locked := false
+var _spawned_t0 := 0
+var _spawned_t1 := 0
+var _spawned_t2 := 0
+
 
 func _ready() -> void:
 	ui.player = player
 	_apply_mood()
-	_start_next_wave()
+	var w: Resource = Game.current_world()
+	_scripted = w != null and w.scripted
+	if _scripted:
+		_run_beat(0)
+	else:
+		_start_next_wave()
+
+
+func _process(_delta: float) -> void:
+	if _scripted and Game.state == Game.State.PLAYING:
+		_check_beats()
 
 
 ## Push the current world's sky, fog and key light into the scene. Doing this at
@@ -56,6 +85,68 @@ func _apply_mood() -> void:
 		deg_to_rad(w.sun_angles.x), deg_to_rad(w.sun_angles.y), deg_to_rad(w.sun_angles.z))
 
 
+# --- scripted level ---------------------------------------------------------
+#
+# Beat 0  four smalls. The whole fight, taught plainly.
+# Beat 1  after two die, one medium walks in. First real threat.
+# Beat 2  at 15% of that medium's health, five more smalls answer the call.
+# Beat 3  at nine meat, two mediums and a small arrive from a distance —
+#         the world defending itself. The quota is already reachable without
+#         them, so they are pressure rather than a wall.
+
+func _check_beats() -> void:
+	if _beat_locked:
+		return
+	match _beat:
+		0:
+			if _kills >= 2:
+				_run_beat(1)
+		1:
+			if is_instance_valid(_guardian) and _guardian.is_alive() \
+			and _guardian.health <= _guardian.max_health * 0.15:
+				_run_beat(2)
+			elif not is_instance_valid(_guardian) or not _guardian.is_alive():
+				_run_beat(2)   # killed outright; do not stall the level
+		2:
+			if Game.collected >= 9:
+				_run_beat(3)
+
+
+func _run_beat(b: int) -> void:
+	_beat = b
+	_beat_locked = true
+	match b:
+		0:
+			for i in 4:
+				await _delay(0.35)
+				_spawn_near(HUSK if i % 2 == 0 else STALKER, 0)
+		1:
+			ui.show_message("SOMETHING BIGGER NOTICED YOU")
+			await _delay(0.8)
+			_guardian = _spawn_near(HUSK, 1, 16.0)
+		2:
+			ui.show_message("THE SMALL ONES ANSWER")
+			for i in 5:
+				await _delay(0.30)
+				_spawn_near(HUSK if i % 3 else STALKER, 0)
+		3:
+			ui.show_message("THE BIG ONES PROTECT THEIR OWN")
+			await _delay(0.5)
+			# Placed downrange and in view, so you see them coming.
+			_spawn_in_view(JUGGERNAUT, 1, 30.0, -7.0)
+			await _delay(0.4)
+			_spawn_in_view(JUGGERNAUT, 1, 32.0, 7.0)
+			await _delay(0.4)
+			_spawn_in_view(STALKER, 0, 26.0, 0.0)
+	_beat_locked = false
+
+
+func _delay(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+
+
+# --- generic waves ----------------------------------------------------------
+
 func _wave_sizes() -> Array:
 	var w: Resource = Game.current_world()
 	if w and not w.wave_sizes.is_empty():
@@ -78,21 +169,53 @@ func _start_next_wave() -> void:
 			_spawning = false
 			return
 		if _alive < max_alive:
-			_spawn()
+			_spawn_near(_roll_weighted(_world_weights("archetype_weights")),
+				_roll_weighted(_world_weights("size_weights")))
 	_spawning = false
 
 
-func _spawn() -> void:
+# --- spawning ---------------------------------------------------------------
+
+func _make(archetype: int, tier: int) -> CharacterBody3D:
 	var e: CharacterBody3D = enemy_scene.instantiate()
-	e.set_archetype(_roll_weighted(_world_weights("archetype_weights")))
-	e.set_tier(_roll_weighted(_world_weights("size_weights")))
+	e.set_archetype(archetype)
+	e.set_tier(tier)
 	add_child(e)
 	e.player = player
-	var a := randf() * TAU
-	var r := spawn_radius + randf() * 5.0
-	e.global_position = player.global_position + Vector3(sin(a) * r, 0.6, cos(a) * r)
 	e.died.connect(_on_enemy_died)
 	_alive += 1
+	match tier:
+		0: _spawned_t0 += 1
+		1: _spawned_t1 += 1
+		_: _spawned_t2 += 1
+	return e
+
+
+## Ring spawn around the player.
+func _spawn_near(archetype: int, tier: int, radius := 0.0) -> CharacterBody3D:
+	var e := _make(archetype, tier)
+	var a := randf() * TAU
+	var r := (radius if radius > 0.0 else spawn_radius + randf() * 5.0)
+	e.global_position = player.global_position + Vector3(sin(a) * r, 0.6, cos(a) * r)
+	return e
+
+
+## Downrange and inside the player's view, so an arrival can be seen rather than
+## simply appearing behind them.
+func _spawn_in_view(archetype: int, tier: int, distance: float, side: float) -> CharacterBody3D:
+	var e := _make(archetype, tier)
+	var cam := player.get_node_or_null("CameraController")
+	var fwd := Vector3.FORWARD
+	if cam:
+		# This rig treats +Z as forward (see hero.gd).
+		fwd = cam.global_transform.basis.z
+	fwd.y = 0.0
+	if fwd.length_squared() < 0.001:
+		fwd = Vector3.FORWARD
+	fwd = fwd.normalized()
+	var right := Vector3(-fwd.z, 0.0, fwd.x)
+	e.global_position = player.global_position + fwd * distance + right * side + Vector3.UP * 0.6
+	return e
 
 
 func _world_weights(prop: String) -> Array:
@@ -121,9 +244,10 @@ func _roll_weighted(weights: Array) -> int:
 
 func _on_enemy_died(e: Node) -> void:
 	_alive -= 1
+	_kills += 1
 
-	# Drops are physical now: the quota only advances when the player walks over
-	# a sphere, which is what makes clearing an area feel like collecting.
+	# Drops are physical: the quota only advances when the player walks over a
+	# sphere, which is what makes clearing an area feel like collecting.
 	var w: Resource = Game.current_world()
 	var per_kill: int = w.drop_per_kill if w else 1
 	var count: int = per_kill * (e.drops if "drops" in e else 1)
@@ -131,11 +255,11 @@ func _on_enemy_died(e: Node) -> void:
 	for i in count:
 		_spawn_pickup(at + Vector3.UP * 1.2)
 
-	if Game.state != Game.State.PLAYING:
+	if Game.state != Game.State.PLAYING or _scripted:
 		return
 
-	# Keep the pressure on: top up as soon as the field thins, rather than
-	# waiting for a full clear. The quota is the goal now, not the wave.
+	# Generic worlds top up as soon as the field thins, rather than waiting for
+	# a full clear. The quota is the goal, not the wave.
 	if _alive <= 1 and not _spawning:
 		await get_tree().create_timer(wave_break).timeout
 		if is_inside_tree():

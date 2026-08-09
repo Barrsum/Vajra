@@ -23,6 +23,9 @@ class_name WorldDef
 ## Hand-built level. Leave null to use the procedural generator.
 @export var arena_scene: PackedScene
 @export_enum("Forest", "Cave", "Ocean", "Night", "Street") var theme := 0
+## Hand-authored beat sequence instead of random waves. Used for the opening
+## level, where the order things arrive in is the whole point.
+@export var scripted := false
 ## Enemies per wave. Waves repeat until the quota is met.
 @export var wave_sizes: Array[int] = [3, 4, 5]
 @export var drop_per_kill := 1

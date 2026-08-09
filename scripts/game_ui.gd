@@ -68,6 +68,11 @@ func _on_collected(have: int, need: int) -> void:
 	_quota.text = "%s   %d / %d" % [ing, have, need]
 
 
+## Called by the level director to narrate a beat.
+func show_message(text: String) -> void:
+	_show_banner(text)
+
+
 func _show_banner(text: String) -> void:
 	_banner.text = text
 	_banner_t = 3.0

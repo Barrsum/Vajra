@@ -54,8 +54,11 @@ func _build_default_worlds() -> void:
 	forest.display_name = "THE THICKET"
 	forest.subtitle = "she wants it fresh"
 	forest.ingredient = "SAP GLAND"
-	forest.ingredient_needed = 10
+	forest.ingredient_needed = 11
 	forest.theme = THEME_FOREST
+	# Beat-scripted: 4 small, then a medium, then 5 more small, then guardians.
+	# 9 small (1 meat) + 1 medium (2 meat) = exactly the 11 required.
+	forest.scripted = true
 	forest.wave_sizes = [3, 4, 4] as Array[int]
 	forest.size_weights = [0.85, 0.15, 0.0] as Array[float]
 	forest.archetype_weights = [0.75, 0.25, 0.0, 0.0] as Array[float]

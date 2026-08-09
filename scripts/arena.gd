@@ -188,6 +188,7 @@ func _start_next_wave() -> void:
 
 func _make(archetype: int, tier: int) -> CharacterBody3D:
 	var e: CharacterBody3D = enemy_scene.instantiate()
+	e.set_creature(_roll_weighted(_world_weights("creature_weights")))
 	e.set_archetype(archetype)
 	e.set_tier(tier)
 	add_child(e)

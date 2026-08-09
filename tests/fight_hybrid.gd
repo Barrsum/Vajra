@@ -17,7 +17,7 @@ func _ready() -> void:
 	Game.state = Game.State.PLAYING
 	Game.collected = 0
 	# Night: every archetype and every size tier in the mix.
-	Game.world_index = 3
+	Game.world_index = 1   # cave: Mutant + Pumpkinhulk
 	var world := MAIN.instantiate()
 	add_child(world)
 	await get_tree().process_frame
@@ -75,10 +75,14 @@ func _ready() -> void:
 	print("  enemies left: %d" % _enemies().size())
 	var seen := {}
 	var tiers := {}
+	var creatures := {}
 	for e in get_tree().get_nodes_in_group("enemies"):
 		var a: String = e.ARCHETYPES[e.archetype]["name"]
 		seen[a] = int(seen.get(a, 0)) + 1
 		tiers[e.tier] = int(tiers.get(e.tier, 0)) + 1
+		var c: String = e.CREATURES[e.creature]["name"]
+		creatures[c] = int(creatures.get(c, 0)) + 1
+	print("  creatures   : %s" % creatures)
 	print("  archetypes  : %s" % seen)
 	print("  size tiers  : %s" % tiers)
 	var ok := kills > 0

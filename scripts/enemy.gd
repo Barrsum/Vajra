@@ -53,6 +53,21 @@ const ARCHETYPES := [
 	},
 ]
 
+## Creatures. All four use Mixamo's skeleton and share one animation library —
+## verified as zero missing bones — so the mesh is a pure swap. `scale`
+## normalises their differing heights (1.86m to 2.38m) to a common base, so tier
+## multipliers mean the same thing whichever creature they land on.
+const CREATURES := [
+	{"name": "MUTANT", "scene": "res://assets/enemy/Mutant.fbx",
+	 "scale": 1.05, "color": Color(0.30, 0.13, 0.16)},
+	{"name": "PUMPKINHULK", "scene": "res://assets/enemy/Pumpkinhulk L Shaw.fbx",
+	 "scale": 0.96, "color": Color(0.34, 0.20, 0.08)},
+	{"name": "SKELETON", "scene": "res://assets/enemy/Skeletonzombie T Avelange.fbx",
+	 "scale": 0.95, "color": Color(0.26, 0.26, 0.22)},
+	{"name": "WARROK", "scene": "res://assets/enemy/Warrok W Kurniawan.fbx",
+	 "scale": 0.82, "color": Color(0.22, 0.15, 0.20)},
+]
+
 ## Size tiers, applied on top of the archetype.
 const TIERS := [
 	{"name": "", "scale": 1.0, "hp": 1.0, "dmg": 1.0, "speed": 1.0,
@@ -80,11 +95,12 @@ const TIERS := [
 @export var burst_time := 0.09
 
 @onready var visual: Node3D = $Visual
-@onready var model: Node3D = $Visual/Model
+var model: Node3D
 @onready var anim_tree: AnimationTree = $Visual/AnimationTree
 
 var tier := 0
 var archetype := 0
+var creature := 0
 var drops := 1
 
 var health := 0.0
@@ -113,7 +129,12 @@ var _body_col := Color(0.30, 0.13, 0.16)
 
 
 
-## Both must be called before the node enters the tree.
+## All three must be called before the node enters the tree.
+func set_creature(i: int) -> void:
+	creature = clampi(i, 0, CREATURES.size() - 1)
+	_body_col = CREATURES[creature]["color"]
+
+
 func set_archetype(i: int) -> void:
 	archetype = clampi(i, 0, ARCHETYPES.size() - 1)
 	var a: Dictionary = ARCHETYPES[archetype]
@@ -124,7 +145,6 @@ func set_archetype(i: int) -> void:
 	_combo = a["combo"]
 	_circle_mul = a["circle"]
 	_aggro = a["aggro"]
-	_body_col = a["color"]
 	_accent = a["accent"]
 
 
@@ -144,10 +164,28 @@ func _ready() -> void:
 		_combo = ARCHETYPES[0]["combo"]
 	health = max_health
 	_circle_side = 1.0 if randf() < 0.5 else -1.0
-	_sm = anim_tree.get("parameters/playback")
 	add_to_group("enemies")
-	scale = Vector3.ONE * float(TIERS[tier]["scale"])
+
+	anim_tree.active = true
+	_sm = anim_tree.get("parameters/playback")
+
+	scale = Vector3.ONE * float(TIERS[tier]["scale"]) * float(CREATURES[creature]["scale"])
 	_collect_materials(model)
+
+
+## Built in _enter_tree, NOT _ready. Children are made ready before their
+## parent, so an AnimationPlayer created in the scene would resolve its
+## "../Model" root against a node that did not exist yet and the rig would
+## simply T-pose forever. _enter_tree on the parent runs first.
+func _enter_tree() -> void:
+	if model != null:
+		return
+	var packed: PackedScene = load(CREATURES[creature]["scene"])
+	model = packed.instantiate()
+	model.name = "Model"
+	var v := get_node("Visual")
+	v.add_child(model)
+	v.move_child(model, 0)
 
 
 func _collect_materials(n: Node) -> void:

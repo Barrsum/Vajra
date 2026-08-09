@@ -62,6 +62,8 @@ func _build_default_worlds() -> void:
 	forest.wave_sizes = [3, 4, 4] as Array[int]
 	forest.size_weights = [0.85, 0.15, 0.0] as Array[float]
 	forest.archetype_weights = [0.75, 0.25, 0.0, 0.0] as Array[float]
+	# one creature; the level teaches the fight, not the bestiary
+	forest.creature_weights = [1.0, 0.0, 0.0, 0.0] as Array[float]
 	forest.sky_top = Color(0.42, 0.60, 0.52)
 	forest.sky_horizon = Color(0.74, 0.82, 0.58)
 	forest.ground_horizon = Color(0.20, 0.28, 0.16)
@@ -89,20 +91,23 @@ func _build_default_worlds() -> void:
 	cave.wave_sizes = [4, 5, 5] as Array[int]
 	cave.size_weights = [0.6, 0.35, 0.05] as Array[float]
 	cave.archetype_weights = [0.40, 0.35, 0.25, 0.0] as Array[float]
-	cave.sky_top = Color(0.72, 0.84, 0.96)
-	cave.sky_horizon = Color(0.80, 0.86, 0.94)
-	cave.ground_horizon = Color(0.55, 0.56, 0.58)
-	cave.fog_color = Color(0.82, 0.87, 0.93)
-	cave.fog_density = 0.006
+	# Pumpkinhulk joins the Mutant
+	cave.creature_weights = [0.5, 0.5, 0.0, 0.0] as Array[float]
+	cave.sky_top = Color(0.34, 0.48, 0.66)
+	cave.sky_horizon = Color(0.62, 0.72, 0.84)
+	cave.ground_horizon = Color(0.30, 0.31, 0.33)
+	cave.fog_color = Color(0.55, 0.63, 0.74)
+	cave.fog_density = 0.009
 	cave.volumetric_density = 0.010
 	cave.sun_color = Color(1.0, 0.98, 0.94)
-	cave.sun_energy = 1.75
+	cave.sun_energy = 1.5
 	cave.sun_angles = Vector3(-72.0, 10.0, 0.0)
-	cave.ambient_energy = 1.0
+	cave.ambient_energy = 0.8
 	cave.glow_intensity = 0.35
-	cave.ground_color = Color(0.33, 0.33, 0.34)
-	cave.prop_color = Color(0.33, 0.31, 0.30)
+	cave.ground_color = Color(0.24, 0.25, 0.27)
+	cave.prop_color = Color(0.22, 0.22, 0.23)
 	cave.accent_color = Color(0.52, 0.58, 0.62)
+	cave.aerial_perspective = 0.35
 	cave.arena_size = 120.0
 	worlds.append(cave)
 
@@ -116,6 +121,8 @@ func _build_default_worlds() -> void:
 	ocean.wave_sizes = [4, 5, 6] as Array[int]
 	ocean.size_weights = [0.5, 0.38, 0.12] as Array[float]
 	ocean.archetype_weights = [0.25, 0.35, 0.28, 0.12] as Array[float]
+	# all four in play
+	ocean.creature_weights = [0.3, 0.3, 0.25, 0.15] as Array[float]
 	ocean.sky_top = Color(0.62, 0.66, 0.68)
 	ocean.sky_horizon = Color(0.86, 0.80, 0.68)
 	ocean.ground_horizon = Color(0.52, 0.50, 0.44)
@@ -130,6 +137,7 @@ func _build_default_worlds() -> void:
 	ocean.ground_color = Color(0.40, 0.38, 0.33)
 	ocean.prop_color = Color(0.38, 0.37, 0.34)
 	ocean.accent_color = Color(0.35, 0.55, 0.58)
+	ocean.aerial_perspective = 0.45
 	ocean.arena_size = 130.0
 	worlds.append(ocean)
 
@@ -143,6 +151,8 @@ func _build_default_worlds() -> void:
 	night.wave_sizes = [4, 6, 7] as Array[int]
 	night.size_weights = [0.4, 0.4, 0.2] as Array[float]
 	night.archetype_weights = [0.15, 0.30, 0.30, 0.25] as Array[float]
+	# everything, weighted toward the heavies
+	night.creature_weights = [0.2, 0.25, 0.25, 0.30] as Array[float]
 	night.sky_top = Color(0.04, 0.05, 0.10)
 	night.sky_horizon = Color(0.10, 0.11, 0.20)
 	night.ground_horizon = Color(0.05, 0.05, 0.08)

@@ -1,7 +1,6 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
-[ext_resource type="PackedScene" path="res://assets/enemy/Mutant.fbx" id="2_model"]
 [ext_resource type="AnimationLibrary" path="res://assets/enemy/enemy_anims.res" id="3_anims"]
 [ext_resource type="AnimationNodeStateMachine" path="res://assets/enemy/enemy_tree.tres" id="4_tree"]
 
@@ -22,8 +21,6 @@ shape = SubResource("ShapeEnemy")
 
 [node name="Visual" type="Node3D" parent="."]
 
-[node name="Model" parent="Visual" instance=ExtResource("2_model")]
-
 [node name="AnimationPlayer" type="AnimationPlayer" parent="Visual"]
 root_node = NodePath("../Model")
 libraries = {
@@ -33,4 +30,5 @@ libraries = {
 [node name="AnimationTree" type="AnimationTree" parent="Visual"]
 tree_root = ExtResource("4_tree")
 anim_player = NodePath("../AnimationPlayer")
-active = true
+; Enabled from enemy.gd once the creature mesh exists.
+active = false

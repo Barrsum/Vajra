@@ -33,6 +33,8 @@ class_name WorldDef
 @export var size_weights: Array[float] = [0.7, 0.25, 0.05]
 ## Chance of each behaviour archetype: [Husk, Stalker, Ravager, Juggernaut].
 @export var archetype_weights: Array[float] = [1.0, 0.0, 0.0, 0.0]
+## Which creatures live here: [Mutant, Pumpkinhulk, Skeleton, Warrok].
+@export var creature_weights: Array[float] = [1.0, 0.0, 0.0, 0.0]
 
 @export_group("Mood")
 @export var sky_top := Color(0.30, 0.33, 0.42)

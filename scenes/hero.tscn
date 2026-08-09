@@ -82,6 +82,10 @@ collision_mask = 1
 [node name="CharacterRotationRoot" type="Node3D" parent="."]
 
 [node name="Model" parent="CharacterRotationRoot" instance=ExtResource("3_model")]
+; 180 yaw. The rotation root is built with +Z as the travel direction, but
+; this mesh is authored facing -Z — without this he walks backwards and
+; swings away from whatever he is looking at.
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="CharacterRotationRoot"]
 root_node = NodePath("../Model")

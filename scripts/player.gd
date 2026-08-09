@@ -93,6 +93,12 @@ var _hitstop_until_ms := 0
 
 var _blade_root: Node3D
 var _blade_scale := 0.0          ## animates 0 -> 1 so the blade grows, not pops
+var _blade_base: Node3D
+var _blade_tip: Node3D
+var _trail: MeshInstance3D
+var _morph_played := false
+
+var _step_accum := 0.0           ## distance travelled since the last footstep
 
 # --- state ------------------------------------------------------------------
 var yaw := 0.0
@@ -178,7 +184,19 @@ func _build_blade() -> void:
 	root_stub.position = Vector3(0, 0.02, 0)
 	_blade_root.add_child(root_stub)
 
+	# Markers the trail samples between.
+	_blade_base = Node3D.new()
+	_blade_base.position = Vector3(0, 0.15, 0)
+	_blade_tip = Node3D.new()
+	_blade_tip.position = Vector3(0, blade_length + 0.35, 0)
+	_blade_root.add_child(_blade_base)
+	_blade_root.add_child(_blade_tip)
+
 	_blade_root.scale = Vector3.ZERO
+
+	_trail = MeshInstance3D.new()
+	_trail.set_script(load("res://scripts/blade_trail.gd"))
+	add_child(_trail)
 
 
 func _find_skeleton(n: Node) -> Skeleton3D:
@@ -212,6 +230,18 @@ func _process(delta: float) -> void:
 		var rate := 26.0 if want > _blade_scale else 7.0
 		_blade_scale = lerpf(_blade_scale, want, 1.0 - exp(-rate * delta))
 		_blade_root.scale = Vector3(1.0, _blade_scale, 1.0) * maxf(_blade_scale, 0.001)
+
+		if want > 0.0 and not _morph_played:
+			_morph_played = true
+			Vfx.morph(_blade_root.global_position)
+		elif want == 0.0 and _blade_scale < 0.1:
+			_morph_played = false
+
+		# The trail is only laid down while the blade is out and moving.
+		if _trail:
+			_trail.set_active(_attack_index > 0 and _blade_scale > 0.5)
+			if _blade_scale > 0.5:
+				_trail.sample(_blade_base.global_position, _blade_tip.global_position)
 	camera.fov = lerpf(camera.fov, base_fov + clampf(planar_speed - walk_speed, 0.0, 4.0) * 1.6, 6.0 * delta)
 
 
@@ -285,6 +315,16 @@ func _physics_process(delta: float) -> void:
 	_face_travel_direction(delta)
 	_update_animation()
 
+	# Footsteps by distance travelled, not by a timer — so they stay in step
+	# whether he is walking or sprinting.
+	if is_on_floor() and planar_speed > 0.6 and not _dodging:
+		_step_accum += planar_speed * delta
+		if _step_accum >= 1.9:
+			_step_accum = 0.0
+			Sfx.play_at(&"footstep", global_position, -6.0)
+	elif planar_speed <= 0.6:
+		_step_accum = 1.5   # primed, so moving off plays a step almost at once
+
 
 # ---------------------------------------------------------------------------
 
@@ -297,6 +337,9 @@ func _update_ground_state(delta: float) -> void:
 	# Landing is detected on the transition, before velocity.y is zeroed.
 	if is_on_floor() and not _was_on_floor and velocity.y < -4.0:
 		_land_timer = 0.28
+		Sfx.play_at(&"land", global_position)
+		Vfx.dust(global_position + Vector3.UP * 0.1, 16)
+		add_trauma(0.25)
 	if is_on_floor():
 		_coyote = coyote_time
 	else:
@@ -369,6 +412,9 @@ func _try_dodge() -> void:
 	_invuln = maxf(_invuln, dodge_iframes)
 	_try_dodge_cancel()   # dodging out of a swing is the core defensive option
 
+	Sfx.play_at(&"dodge", global_position + Vector3.UP)
+	Vfx.dust(global_position + Vector3.UP * 0.15, 14)
+
 
 func _process_dodge(delta: float) -> void:
 	_dodge_t += delta
@@ -440,6 +486,7 @@ func _start_attack(n: int) -> void:
 		speed = minf(speed, gap * 6.0)
 	velocity += fwd * speed
 
+	Sfx.play_at(&"swing_heavy" if n == 3 else &"swing_light", global_position + Vector3.UP)
 	_travel(clip)
 
 
@@ -501,6 +548,13 @@ func _resolve_swing() -> void:
 		e.take_damage(def["damage"], global_position, def["knock"])
 		landed = true
 
+		# Effects fire at the contact point, not at either body's origin.
+		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
+		var heavy: bool = float(def["damage"]) >= 40.0
+		Vfx.sparks(contact, fwd + Vector3.UP * 0.4, heavy)
+		Vfx.ichor(contact, -fwd * 0.3 + Vector3.UP, heavy)
+		Sfx.play_at(&"impact_heavy" if heavy else &"impact_light", contact)
+
 	if landed:
 		hit_stop(def["stop"])
 		add_trauma(def["shake"])
@@ -515,6 +569,7 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	_invuln = 0.55
 	add_trauma(0.55)
 	hit_stop(0.05)
+	Sfx.play_at(&"hurt", global_position + Vector3.UP)
 	if health <= 0.0:
 		alive = false
 		_travel("death")

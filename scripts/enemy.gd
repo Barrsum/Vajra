@@ -40,6 +40,7 @@ var state := State.CHASE
 var _t := 0.0
 var _has_token := false
 var _did_hit := false
+var _roared := false
 var _circle_side := 1.0
 var _flash := 0.0
 var _facing := 0.0
@@ -125,6 +126,9 @@ func _physics_process(delta: float) -> void:
 					_t = 0.0
 
 		State.TELEGRAPH:
+			if not _roared:
+				_roared = true
+				Sfx.play_at(&"roar", global_position + Vector3.UP * 1.6)
 			wish = to_player * move_speed * 0.25
 			if _t >= telegraph_time:
 				_set_state(State.STRIKE)
@@ -140,6 +144,7 @@ func _physics_process(delta: float) -> void:
 				_set_state(State.RECOVER)
 
 		State.RECOVER:
+			_roared = false
 			if _t >= recover_time:
 				_release_token()
 				_set_state(State.CHASE)
@@ -223,6 +228,8 @@ func _die() -> void:
 	collision_mask = 0
 	died.emit(self)
 	_travel("death")
+	Sfx.play_at(&"death", global_position + Vector3.UP * 1.2)
+	Vfx.death_burst(global_position + Vector3.UP * 1.1)
 	# Leave the corpse a moment, then sink it out of sight.
 	var tw := create_tween()
 	tw.tween_interval(2.6)

@@ -12,6 +12,10 @@ var cam: Node3D
 
 
 func _ready() -> void:
+	# The arena only spawns while the run is live. Loading the scene directly
+	# bypasses Game.start_run(), so declare the state by hand.
+	Game.state = Game.State.PLAYING
+	Game.collected = 0
 	var world := MAIN.instantiate()
 	add_child(world)
 	await get_tree().process_frame

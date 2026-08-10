@@ -86,7 +86,7 @@ func _build_default_worlds() -> void:
 	cave.display_name = "THE OPEN MOUTH"
 	cave.subtitle = "mind the drop"
 	cave.ingredient = "STONE MARROW"
-	cave.ingredient_needed = 14
+	cave.ingredient_needed = 23
 	cave.theme = THEME_CAVE
 	# Scripted opening: two chargers pin you, the heavy swings, you are thrown
 	# into the middle of everything else.

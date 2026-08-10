@@ -101,6 +101,16 @@ var model: Node3D
 var tier := 0
 var archetype := 0
 var creature := 0
+
+## Set-piece roles. When one is active the normal brain is bypassed entirely —
+## a scripted actor must not be pulled off its mark by circling logic.
+enum Role { FREE, CHARGE, HOLD, STALK, SMASH, DONE }
+var role := Role.FREE
+var role_side := 1.0        ## which arm a HOLD actor takes
+var role_speed := 1.0
+var _role_t := 0.0
+var _smash_hit := false
+signal smashed(enemy)
 var drops := 1
 
 var health := 0.0
@@ -232,6 +242,10 @@ func _physics_process(delta: float) -> void:
 	var wish := Vector3.ZERO
 	var step := _step()
 
+	if role != Role.FREE:
+		_scripted(delta, to_player, dist)
+		return
+
 	match state:
 		State.CHASE:
 			if _has_token or _take_token():
@@ -319,8 +333,81 @@ func _physics_process(delta: float) -> void:
 		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
 		visual.rotation.y = _facing
 
-	_separate()
+	_separate(delta)
 	_update_animation()
+	_apply_materials()
+
+
+## Scripted actors move, animate and resolve on their own timeline.
+func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
+	_role_t += delta
+	var wish := Vector3.ZERO
+
+	match role:
+		Role.CHARGE:
+			# Run for the player's flank, not their centre, so two chargers end
+			# up on opposite arms rather than fighting for the same spot.
+			var side := Vector3(-to_player.z, 0.0, to_player.x) * role_side
+			var mark: Vector3 = player.global_position + side * 0.85
+			var to_mark: Vector3 = mark - global_position
+			to_mark.y = 0.0
+			if to_mark.length() < 1.3:
+				role = Role.HOLD
+				_role_t = 0.0
+				if player.has_method("set_grabbed"):
+					player.set_grabbed(true)
+			else:
+				wish = to_mark.normalized() * move_speed * role_speed
+
+		Role.HOLD:
+			# Pinned to the arm. Snapped rather than steered, or the grip drifts.
+			var side2 := Vector3(-to_player.z, 0.0, to_player.x) * role_side
+			var mark2: Vector3 = player.global_position + side2 * 0.85
+			global_position = global_position.lerp(mark2, 1.0 - exp(-14.0 * delta))
+			velocity = Vector3.ZERO
+
+		Role.STALK:
+			if dist > reach * 0.95:
+				wish = to_player * move_speed * role_speed
+			else:
+				role = Role.SMASH
+				_role_t = 0.0
+				_smash_hit = false
+				Sfx.play_at(&"roar", global_position + Vector3.UP * 1.8)
+
+		Role.SMASH:
+			# Long wind-up, then one enormous connect.
+			if not _smash_hit and _role_t >= 0.85:
+				_smash_hit = true
+				smashed.emit(self)
+			if _role_t >= 1.6:
+				role = Role.FREE
+
+		Role.DONE:
+			role = Role.FREE
+
+	var rate := 14.0
+	velocity.x = move_toward(velocity.x, wish.x, rate * delta)
+	velocity.z = move_toward(velocity.z, wish.z, rate * delta)
+	if not is_on_floor():
+		velocity.y -= 20.0 * delta
+	else:
+		velocity.y = 0.0
+	move_and_slide()
+
+	if dist > 0.05:
+		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
+		visual.rotation.y = _facing
+
+	match role:
+		Role.HOLD:
+			_travel("attack2")
+		Role.SMASH:
+			_travel("attack1")
+		_:
+			_travel("locomotion")
+			anim_tree.set("parameters/locomotion/blend_position",
+				Vector2(velocity.x, velocity.z).length())
 	_apply_materials()
 
 
@@ -328,7 +415,7 @@ func _physics_process(delta: float) -> void:
 ## tension — distance stops being reliable safety.
 ## Physical collision stops overlap, but a crowd pressing on one point can lock
 ## up. A soft outward nudge keeps them shuffling instead of jamming.
-func _separate() -> void:
+func _separate(delta: float) -> void:
 	var my_r: float = 0.5 * float(TIERS[tier]["scale"])
 	for other in get_tree().get_nodes_in_group("enemies"):
 		if other == self or not other.is_alive():
@@ -338,9 +425,11 @@ func _separate() -> void:
 		var dist := d.length()
 		var min_d: float = my_r + 0.5 * float(TIERS[other.tier]["scale"])
 		if dist > 0.001 and dist < min_d:
-			# Heavier things shove lighter things, not the other way round.
-			var push: float = (min_d - dist) * 3.0 * (1.0 if tier <= other.tier else 0.35)
-			velocity += d.normalized() * push
+			# Position correction, NOT a velocity add. Adding to velocity every
+			# frame with no delta and no cap compounds into metres per second and
+			# sends a crowd flying — which is exactly what it did.
+			var push: float = minf((min_d - dist), 0.5) * 6.0 				* (1.0 if tier <= other.tier else 0.35)
+			global_position += d.normalized() * push * delta
 
 
 func _maybe_burst(dist: float) -> void:
@@ -479,10 +568,14 @@ func _apply_materials() -> void:
 		tele = clampf(_t / maxf(float(_step()[0]), 0.01), 0.0, 1.0)
 		if _feinting:
 			tele *= 0.6   # a feint glows less, so it can be told apart if you look
-	var e := 0.05 + _flash * 2.2 + tele * 1.6 + (1.2 if _burst_t > 0.0 else 0.0)
+	var charged := role == Role.CHARGE or role == Role.HOLD
+	var e := 0.05 + _flash * 2.2 + tele * 1.6 + (1.2 if _burst_t > 0.0 else 0.0) 		+ (0.9 + sin(_role_t * 9.0) * 0.35 if charged else 0.0)
 	var col := _accent.lerp(Color(1.0, 0.15, 0.05), tele)
 	if _burst_t > 0.0:
 		col = Color(1.0, 0.9, 0.7)
+	if role == Role.CHARGE or role == Role.HOLD:
+		# Warm energy, not a light source — the scene glow amplifies this hard.
+		col = Color(1.0, 0.62, 0.18)
 	for m in _mats:
 		m.emission = col
 		m.emission_energy_multiplier = e

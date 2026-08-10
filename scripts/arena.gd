@@ -35,6 +35,8 @@ var _beat := 0
 var _kills := 0
 var _guardian: Node = null      ## the first medium; beat 2 waits on its health
 var _beat_locked := false
+var _grabbers: Array = []
+var _smasher: Node = null
 var _spawned_t0 := 0
 var _spawned_t1 := 0
 var _spawned_t2 := 0
@@ -107,6 +109,9 @@ func _apply_mood() -> void:
 func _check_beats() -> void:
 	if _beat_locked:
 		return
+	if Game.world_index == 1:
+		_check_open_mouth()
+		return
 	match _beat:
 		0:
 			if _kills >= 2:
@@ -125,6 +130,14 @@ func _check_beats() -> void:
 func _run_beat(b: int) -> void:
 	_beat = b
 	_beat_locked = true
+	if Game.world_index == 1:
+		await _beats_open_mouth(b)
+	else:
+		await _beats_thicket(b)
+	_beat_locked = false
+
+
+func _beats_thicket(b: int) -> void:
 	match b:
 		0:
 			for i in 4:
@@ -148,7 +161,92 @@ func _run_beat(b: int) -> void:
 			_spawn_in_view(JUGGERNAUT, 1, 21.0, 5.0, 1.8)
 			await _delay(0.4)
 			_spawn_in_view(STALKER, 0, 16.0, 0.0, 1.8)
-	_beat_locked = false
+
+
+# --- Level 2 opening: the ambush -------------------------------------------
+#
+# Three are already in frame when you arrive. Two charge and pin an arm each;
+# the heavy one limps in and swings. You are thrown, and you land in the middle
+# of everything else.
+
+func _beats_open_mouth(b: int) -> void:
+	match b:
+		0:
+			_grabbers.clear()
+			# Two chargers, one per flank, and the heavy hanging back.
+			var g1 := _spawn_in_view(HUSK, 0, 9.0, -3.5, 0.9)
+			g1.set_deferred("role", g1.Role.CHARGE)
+			g1.role_side = -1.0
+			g1.role_speed = 2.2
+
+			var g2 := _spawn_in_view(HUSK, 1, 10.0, 3.5, 1.2)
+			g2.set_deferred("role", g2.Role.CHARGE)
+			g2.role_side = 1.0
+			g2.role_speed = 1.9
+
+			_grabbers = [g1, g2]
+
+			# Close enough that the wait is dread rather than tedium: a limp at
+			# ~2.3 m/s from 10m is about four seconds of being held.
+			var sm := _spawn_in_view(JUGGERNAUT, 1, 10.5, 0.0, 1.6)
+			sm.creature = 1                      # Pumpkinhulk
+			sm.role_speed = 1.55                 # a limp, not a charge
+			sm.set_deferred("role", sm.Role.STALK)
+			sm.smashed.connect(_on_smash)
+			_smasher = sm
+			ui.show_message("THEY WERE WAITING")
+		1:
+			ui.show_message("HELD")
+		2:
+			# Thrown clear, and the ground you land on is not empty.
+			await _delay(0.9)
+			ui.show_message("GET UP")
+			for i in 7:
+				await _delay(0.25)
+				_spawn_near(HUSK if i % 2 == 0 else STALKER, 0, 14.0 + randf() * 8.0)
+
+
+func _check_open_mouth() -> void:
+	match _beat:
+		0:
+			# Both arms taken, or the player killed one before it landed.
+			var holding := 0
+			var lost := 0
+			for g in _grabbers:
+				if not is_instance_valid(g) or not g.is_alive():
+					lost += 1
+				elif g.role == g.Role.HOLD:
+					holding += 1
+			if holding >= 1 or lost >= _grabbers.size():
+				_run_beat(1)
+		1:
+			# The smash resolves this beat; if the heavy dies first, move on.
+			if not is_instance_valid(_smasher) or not _smasher.is_alive():
+				_release_grabbers()
+				_run_beat(2)
+
+
+func _on_smash(_e: Node) -> void:
+	if _beat > 1:
+		return
+	var away: Vector3 = player.global_position - _smasher.global_position
+	away.y = 0.0
+	_release_grabbers()
+	if player.has_method("launch"):
+		player.launch(away, 17.0, 9.0)
+	if player.has_method("take_damage"):
+		player.take_damage(18.0, _smasher.global_position)
+	_run_beat(2)
+
+
+func _release_grabbers() -> void:
+	if player.has_method("set_grabbed"):
+		player.set_grabbed(false)
+	for g in _grabbers:
+		if is_instance_valid(g):
+			g.role = g.Role.FREE
+	if is_instance_valid(_smasher):
+		_smasher.role = _smasher.Role.FREE
 
 
 func _delay(seconds: float) -> void:

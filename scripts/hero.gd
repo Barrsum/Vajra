@@ -110,6 +110,12 @@ var _morph_played := false
 
 var _step_accum := 0.0
 
+## Set-piece control. `grabbed` freezes input without freezing physics, so the
+## player still falls and still takes hits — being held has to feel like being
+## held, not like a cutscene.
+var grabbed := false
+var _launch_lock := 0.0
+
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -195,13 +201,16 @@ func _physics_process(delta: float) -> void:
 	var is_just_on_floor := is_on_floor() and not _is_on_floor_buffer
 	_is_on_floor_buffer = is_on_floor()
 
-	if alive:
+	_launch_lock = maxf(0.0, _launch_lock - delta)
+	var locked := grabbed or _launch_lock > 0.0
+
+	if alive and not locked:
 		if Input.is_action_just_pressed("dodge"):
 			_try_dodge()
 		if Input.is_action_just_pressed("attack"):
 			_try_attack()
 
-	_move_direction = _get_camera_oriented_input()
+	_move_direction = Vector3.ZERO if locked else _get_camera_oriented_input()
 	if _move_direction.length() > 0.2:
 		_last_strong_direction = _move_direction.normalized()
 	_orient_character_to_direction(_last_strong_direction, delta)
@@ -218,6 +227,10 @@ func _physics_process(delta: float) -> void:
 		var sp := dodge_speed * (1.0 - p * p)
 		velocity.x = _dodge_dir.x * sp
 		velocity.z = _dodge_dir.z * sp
+	elif locked:
+		if grabbed:
+			velocity.x = move_toward(velocity.x, 0.0, 40.0 * delta)
+			velocity.z = move_toward(velocity.z, 0.0, 40.0 * delta)
 	else:
 		var sprinting := Input.is_action_pressed("sprint") and _move_direction.length() > 0.1
 		var speed := sprint_speed if sprinting else walk_speed
@@ -237,6 +250,8 @@ func _physics_process(delta: float) -> void:
 		velocity.y += jump_additional_force * delta
 
 	if is_just_on_floor and not _dodging:
+		if _launch_lock > 0.0 and _launch_lock < 1.3:
+			_launch_lock = 0.0   # landed: hand control straight back
 		_land_timer = 0.26
 		Sfx.play_at(&"land", global_position)
 		Vfx.dust(global_position + Vector3.UP * 0.1, 14)
@@ -428,6 +443,39 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	_travel("hit")
 	if health <= 0.0:
 		alive = false
+
+
+## Held in place by something. Input is off, physics is not.
+func set_grabbed(v: bool) -> void:
+	grabbed = v
+	if v:
+		_attack_index = 0
+		_attack_timer = 0.0
+		_attack_buffered = false
+		_dodging = false
+
+
+## Thrown. Control returns only after landing, so the arc is not cancellable.
+func launch(dir: Vector3, force: float, lift: float) -> void:
+	grabbed = false
+	_launch_lock = 1.6
+	_attack_index = 0
+	_attack_timer = 0.0
+	_dodging = false
+	var d := dir
+	d.y = 0.0
+	if d.length_squared() < 0.001:
+		d = Vector3.FORWARD
+	velocity = d.normalized() * force + Vector3.UP * lift
+	add_trauma(1.4)
+	hit_stop(0.16)
+	Sfx.play_at(&"impact_heavy", global_position + Vector3.UP)
+	Vfx.dust(global_position + Vector3.UP * 0.2, 20)
+	_travel("hit")
+
+
+func is_launched() -> bool:
+	return _launch_lock > 0.0
 
 
 func is_invulnerable() -> bool:

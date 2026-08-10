@@ -88,6 +88,9 @@ func _build_default_worlds() -> void:
 	cave.ingredient = "STONE MARROW"
 	cave.ingredient_needed = 14
 	cave.theme = THEME_CAVE
+	# Scripted opening: two chargers pin you, the heavy swings, you are thrown
+	# into the middle of everything else.
+	cave.scripted = true
 	cave.wave_sizes = [4, 5, 5] as Array[int]
 	cave.size_weights = [0.6, 0.35, 0.05] as Array[float]
 	cave.archetype_weights = [0.40, 0.35, 0.25, 0.0] as Array[float]

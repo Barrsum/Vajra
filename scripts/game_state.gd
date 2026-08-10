@@ -60,6 +60,7 @@ func _build_default_worlds() -> void:
 	# 9 small (1 meat) + 1 medium (2 meat) = exactly the 11 required.
 	forest.scripted = true
 	forest.wave_sizes = [3, 4, 4] as Array[int]
+	forest.player_power = 1.0
 	forest.size_weights = [0.85, 0.15, 0.0] as Array[float]
 	forest.archetype_weights = [0.75, 0.25, 0.0, 0.0] as Array[float]
 	# one creature; the level teaches the fight, not the bestiary
@@ -92,6 +93,7 @@ func _build_default_worlds() -> void:
 	# into the middle of everything else.
 	cave.scripted = true
 	cave.wave_sizes = [4, 5, 5] as Array[int]
+	cave.player_power = 1.5
 	cave.size_weights = [0.6, 0.35, 0.05] as Array[float]
 	cave.archetype_weights = [0.40, 0.35, 0.25, 0.0] as Array[float]
 	# Pumpkinhulk joins the Mutant
@@ -124,6 +126,7 @@ func _build_default_worlds() -> void:
 	# Scripted: three 2x, reinforcements at 80%, then two 4x arrivals.
 	ocean.scripted = true
 	ocean.wave_sizes = [4, 5, 6] as Array[int]
+	ocean.player_power = 1.9
 	ocean.size_weights = [0.5, 0.38, 0.12] as Array[float]
 	ocean.archetype_weights = [0.25, 0.35, 0.28, 0.12] as Array[float]
 	# all four in play
@@ -155,6 +158,7 @@ func _build_default_worlds() -> void:
 	night.ingredient_needed = 18
 	night.theme = THEME_NIGHT
 	night.wave_sizes = [4, 6, 7] as Array[int]
+	night.player_power = 2.5
 	night.size_weights = [0.4, 0.4, 0.2] as Array[float]
 	night.archetype_weights = [0.15, 0.30, 0.30, 0.25] as Array[float]
 	# everything, weighted toward the heavies

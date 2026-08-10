@@ -29,6 +29,9 @@ class_name WorldDef
 ## Enemies per wave. Waves repeat until the quota is met.
 @export var wave_sizes: Array[int] = [3, 4, 5]
 @export var drop_per_kill := 1
+## Player damage multiplier for this world. The bestiary scales up level to
+## level, so the hero has to as well or every fight just gets longer.
+@export var player_power := 1.0
 ## Chance an enemy spawns at each size tier: [1x, 2x, 4x]. Normalised on use.
 @export var size_weights: Array[float] = [0.7, 0.25, 0.05]
 ## Chance of each behaviour archetype: [Husk, Stalker, Ravager, Juggernaut].
@@ -37,6 +40,9 @@ class_name WorldDef
 @export var creature_weights: Array[float] = [1.0, 0.0, 0.0, 0.0]
 
 @export_group("Mood")
+## Master switch for fog and haze. Off for now — clarity first; atmosphere
+## comes back later via shaders. The values below are kept, not deleted.
+@export var fog_on := false
 @export var sky_top := Color(0.30, 0.33, 0.42)
 @export var sky_horizon := Color(0.95, 0.60, 0.31)
 @export var ground_horizon := Color(0.42, 0.28, 0.19)

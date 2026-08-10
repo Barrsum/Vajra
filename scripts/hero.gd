@@ -110,6 +110,9 @@ var _morph_played := false
 
 var _step_accum := 0.0
 
+## Damage and knockback multiplier for the current world, read once on spawn.
+var power := 1.0
+
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
 ## held, not like a cutscene.
@@ -120,6 +123,9 @@ var _launch_lock := 0.0
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	health = max_health
+	var w: Resource = Game.current_world()
+	if w:
+		power = w.player_power
 	_sm = anim_tree.get("parameters/playback")
 	_camera_controller.setup(self)
 	_style_model(model)
@@ -154,7 +160,8 @@ func _process(delta: float) -> void:
 		var want := 1.0 if _attack_index > 0 else 0.0
 		var rate := 26.0 if want > _blade_scale else 7.0
 		_blade_scale = lerpf(_blade_scale, want, 1.0 - exp(-rate * delta))
-		_blade_root.scale = Vector3.ONE * maxf(_blade_scale, 0.001)
+		# Blade grows with power, so the upgrade is visible as well as felt.
+		_blade_root.scale = Vector3.ONE * maxf(_blade_scale, 0.001) * (1.0 + (power - 1.0) * 0.30)
 
 		if want > 0.0 and not _morph_played:
 			_morph_played = true
@@ -413,7 +420,7 @@ func _resolve_swing() -> void:
 			continue
 
 		_swing_hit.append(e)
-		e.take_damage(def["damage"], global_position, def["knock"])
+		e.take_damage(float(def["damage"]) * power, global_position, float(def["knock"]) * power)
 		landed = true
 
 		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
@@ -423,8 +430,8 @@ func _resolve_swing() -> void:
 		Sfx.play_at(&"impact_heavy" if heavy else &"impact_light", contact)
 
 	if landed:
-		hit_stop(def["stop"])
-		add_trauma(def["shake"])
+		hit_stop(float(def["stop"]) * minf(power, 1.6))
+		add_trauma(float(def["shake"]) * minf(power, 1.5))
 
 
 func take_damage(amount: float, _from: Vector3) -> void:

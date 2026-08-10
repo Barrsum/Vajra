@@ -79,6 +79,11 @@ func _apply_mood() -> void:
 		sky_mat.ground_horizon_color = w.ground_horizon
 		sky_mat.ground_bottom_color = w.ground_horizon.darkened(0.4)
 
+	# Fog and haze are off while clarity matters more than atmosphere. The
+	# per-world values are still here and still applied, so flipping fog_on
+	# brings the mood back without re-tuning anything.
+	env.fog_enabled = w.fog_on
+	env.volumetric_fog_enabled = w.fog_on
 	env.fog_light_color = w.fog_color
 	env.fog_density = w.fog_density
 	env.volumetric_fog_density = w.volumetric_density

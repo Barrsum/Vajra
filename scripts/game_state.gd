@@ -121,11 +121,14 @@ func _build_default_worlds() -> void:
 	ocean.ingredient = "GEL SAC"
 	ocean.ingredient_needed = 16
 	ocean.theme = THEME_OCEAN
+	# Scripted: three 2x, reinforcements at 80%, then two 4x arrivals.
+	ocean.scripted = true
 	ocean.wave_sizes = [4, 5, 6] as Array[int]
 	ocean.size_weights = [0.5, 0.38, 0.12] as Array[float]
 	ocean.archetype_weights = [0.25, 0.35, 0.28, 0.12] as Array[float]
 	# all four in play
-	ocean.creature_weights = [0.3, 0.3, 0.25, 0.15] as Array[float]
+	# No Warrok here — it is held back so level 4 has something new.
+	ocean.creature_weights = [0.34, 0.33, 0.33, 0.0] as Array[float]
 	ocean.sky_top = Color(0.62, 0.66, 0.68)
 	ocean.sky_horizon = Color(0.86, 0.80, 0.68)
 	ocean.ground_horizon = Color(0.52, 0.50, 0.44)

@@ -142,6 +142,9 @@ var _burst_cd := 0.0
 var _sm: AnimationNodeStateMachinePlayback
 var _anim_state := ""
 var _mats: Array[StandardMaterial3D] = []
+## Each material's own albedo, so the hit flash can return to it. Without
+## this the flash would have to assume a flat colour and the texture is lost.
+var _base_cols: Array[Color] = []
 var _accent := Color(0.35, 1.0, 0.75)
 var _body_col := Color(0.30, 0.13, 0.16)
 
@@ -207,18 +210,27 @@ func _enter_tree() -> void:
 	v.move_child(model, 0)
 
 
+## Keeps each creature's own imported material — texture and all — and only adds
+## an emission channel for the hit flash and telegraph glow. Replacing the
+## material outright is what made every monster an untextured silhouette.
 func _collect_materials(n: Node) -> void:
 	if n is MeshInstance3D:
 		var mi := n as MeshInstance3D
 		for s in mi.mesh.get_surface_count():
-			var m := StandardMaterial3D.new()
-			m.albedo_color = _body_col
-			m.roughness = 0.75
+			var base := mi.get_active_material(s)
+			var m: StandardMaterial3D
+			if base is StandardMaterial3D:
+				m = (base as StandardMaterial3D).duplicate()
+			else:
+				m = StandardMaterial3D.new()
+				m.albedo_color = _body_col
+				m.roughness = 0.75
 			m.emission_enabled = true
 			m.emission = _accent
 			m.emission_energy_multiplier = 0.05
 			mi.set_surface_override_material(s, m)
 			_mats.append(m)
+			_base_cols.append(m.albedo_color)
 	for c in n.get_children():
 		_collect_materials(c)
 
@@ -663,7 +675,9 @@ func _apply_materials() -> void:
 	if role == Role.CHARGE or role == Role.HOLD:
 		# Warm energy, not a light source — the scene glow amplifies this hard.
 		col = Color(1.0, 0.62, 0.18)
-	for m in _mats:
+	for i in _mats.size():
+		var m := _mats[i]
 		m.emission = col
 		m.emission_energy_multiplier = e
-		m.albedo_color = _body_col.lerp(Color(1, 0.9, 0.9), _flash * 0.7)
+		# Flash from the material's own colour, so textured skin is preserved.
+		m.albedo_color = _base_cols[i].lerp(Color(1, 0.9, 0.9), _flash * 0.7)

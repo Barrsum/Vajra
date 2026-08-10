@@ -38,6 +38,11 @@ var _beat_locked := false
 var _grabbers: Array = []
 var _smasher: Node = null
 var _lead: Node = null
+# --- level 3 ---
+var _l3_mediums: Array = []
+var _l3_reinforced: Array = []   ## which mediums have already called a small
+var _l3_smalls: Array = []
+var _l3_giant_a := -1
 var _spawned_t0 := 0
 var _spawned_t1 := 0
 var _spawned_t2 := 0
@@ -108,6 +113,9 @@ func _apply_mood() -> void:
 #         them, so they are pressure rather than a wall.
 
 func _check_beats() -> void:
+	if Game.world_index == 2:
+		_check_dust_shallows()
+		return
 	if _beat_locked:
 		return
 	if Game.world_index == 1:
@@ -131,7 +139,9 @@ func _check_beats() -> void:
 func _run_beat(b: int) -> void:
 	_beat = b
 	_beat_locked = true
-	if Game.world_index == 1:
+	if Game.world_index == 2:
+		await _beats_dust_shallows(b)
+	elif Game.world_index == 1:
 		await _beats_open_mouth(b)
 	else:
 		await _beats_thicket(b)
@@ -252,6 +262,90 @@ func _face_in_view(e: Node3D, distance: float, side: float) -> void:
 func _spot_near(e: Node3D, radius: float) -> void:
 	var a := randf() * TAU
 	e.global_position = player.global_position + Vector3(sin(a) * radius, 0.6, cos(a) * radius)
+
+
+# --- Level 3: the shallows -------------------------------------------------
+#
+# Three 2x monsters, one of each species. Wound any of them to 80% and it calls
+# a small. Kill two and something 4x wades in. Clear the rest and a second 4x,
+# a different species, follows. Then the world goes random.
+
+func _beats_dust_shallows(b: int) -> void:
+	match b:
+		0:
+			_l3_mediums.clear()
+			_l3_reinforced.clear()
+			_l3_smalls.clear()
+			ui.show_message("THREE OF THEM")
+			# One of each species so the roster reads immediately.
+			for c in [0, 1, 2]:
+				await _delay(0.45)
+				var e := _prepare(RAVAGER if c == 0 else HUSK, 1, c)
+				_place(e, 1)
+				_spot_near(e, 13.0 + randf() * 4.0)
+				Vfx.spawn_portal(e.global_position, _portal_color(HUSK), 1.1)
+				_l3_mediums.append(e)
+				_l3_reinforced.append(false)
+		1:
+			ui.show_message("SOMETHING LARGER")
+			_l3_giant_a = randi() % 3
+			var g := _prepare(JUGGERNAUT, 2, _l3_giant_a)
+			_place(g, 2)
+			_spot_near(g, 20.0)
+			Vfx.spawn_portal(g.global_position, Color(1.0, 0.45, 0.10), 1.9)
+		2:
+			ui.show_message("AND ANOTHER")
+			# Deliberately a different species from the first, so the second
+			# arrival is not a repeat.
+			var others: Array = [0, 1, 2].filter(func(i): return i != _l3_giant_a)
+			var pick: int = others[randi() % others.size()]
+			var g2 := _prepare(JUGGERNAUT, 2, pick)
+			_place(g2, 2)
+			_spot_near(g2, 22.0)
+			Vfx.spawn_portal(g2.global_position, Color(1.0, 0.45, 0.10), 1.9)
+		3:
+			# Random spawning from here.
+			_scripted = false
+			_start_next_wave()
+
+
+func _check_dust_shallows() -> void:
+	# Runs every frame regardless of beat: a medium can cross 80% at any point.
+	for i in _l3_mediums.size():
+		if i >= _l3_reinforced.size() or _l3_reinforced[i]:
+			continue
+		var m = _l3_mediums[i]
+		if not is_instance_valid(m) or not m.is_alive():
+			continue
+		if m.health <= m.max_health * 0.8:
+			_l3_reinforced[i] = true
+			var sm := _prepare(STALKER, 0, m.creature)
+			_place(sm, 0)
+			_spot_near(sm, 9.0 + randf() * 4.0)
+			Vfx.spawn_portal(sm.global_position, _portal_color(STALKER), 0.5)
+			_l3_smalls.append(sm)
+
+	if _beat_locked:
+		return
+
+	match _beat:
+		0:
+			if _l3_mediums.size() >= 3 and _dead_count(_l3_mediums) >= 2:
+				_run_beat(1)
+		1:
+			if _dead_count(_l3_mediums) >= _l3_mediums.size() 			and _dead_count(_l3_smalls) >= _l3_smalls.size():
+				_run_beat(2)
+		2:
+			if _alive <= 2:
+				_run_beat(3)
+
+
+func _dead_count(list: Array) -> int:
+	var n := 0
+	for e in list:
+		if not is_instance_valid(e) or not e.is_alive():
+			n += 1
+	return n
 
 
 func _check_open_mouth() -> void:

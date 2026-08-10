@@ -43,6 +43,11 @@ var _l3_mediums: Array = []
 var _l3_reinforced: Array = []   ## which mediums have already called a small
 var _l3_smalls: Array = []
 var _l3_giant_a := -1
+# --- level 4 ---
+## Stays scripted forever: reinforcement is the level's rule, not an opening.
+var _handover := false
+var _l4_warrok: Node = null
+var _l4_reinforced := {}   ## instance ids of mediums that already called help
 var _spawned_t0 := 0
 var _spawned_t1 := 0
 var _spawned_t2 := 0
@@ -118,6 +123,9 @@ func _apply_mood() -> void:
 #         them, so they are pressure rather than a wall.
 
 func _check_beats() -> void:
+	if Game.world_index == 3:
+		_check_long_night()
+		return
 	if Game.world_index == 2:
 		_check_dust_shallows()
 		return
@@ -144,7 +152,9 @@ func _check_beats() -> void:
 func _run_beat(b: int) -> void:
 	_beat = b
 	_beat_locked = true
-	if Game.world_index == 2:
+	if Game.world_index == 3:
+		await _beats_long_night(b)
+	elif Game.world_index == 2:
 		await _beats_dust_shallows(b)
 	elif Game.world_index == 1:
 		await _beats_open_mouth(b)
@@ -269,6 +279,111 @@ func _spot_near(e: Node3D, radius: float) -> void:
 	e.global_position = player.global_position + Vector3(sin(a) * radius, 0.6, cos(a) * radius)
 
 
+# --- Level 4: the long night ----------------------------------------------
+#
+# All four species at 2x, close together. Five seconds in, a 4x Warrok arrives
+# downrange with a huge light. Wound it to 53% and the level 2 ambush repeats
+# mid-fight. After that the world goes random — but only mediums and giants
+# spawn, and minis are called solely by a wounded medium, and carry no meat.
+
+func _beats_long_night(b: int) -> void:
+	match b:
+		0:
+			_l4_reinforced.clear()
+			ui.show_message("ALL OF THEM")
+			for c in [0, 1, 2, 3]:
+				await _delay(0.3)
+				var e := _prepare(RAVAGER if c % 2 == 0 else HUSK, 1, c)
+				_place(e, 1)
+				# Close together, so the opening is one crowd, not four fights.
+				_face_in_view(e, 12.0 + randf() * 2.0, -5.0 + float(c) * 3.4)
+				Vfx.spawn_portal(e.global_position, _portal_color(HUSK), 1.0)
+
+			await _delay(5.0)
+			ui.show_message("SOMETHING IS COMING")
+			var wk := _prepare(JUGGERNAUT, 2, 3)      # 4x Warrok
+			_place(wk, 2)
+			_face_in_view(wk, 26.0, 0.0)
+			Vfx.spawn_portal(wk.global_position, Color(1.0, 0.42, 0.08), 3.2)
+			_l4_warrok = wk
+		1:
+			# The ambush again, in the middle of an ongoing fight.
+			ui.show_message("NOT THIS AGAIN")
+			_grabbers.clear()
+			var g1 := _prepare(HUSK, 0, 1)
+			g1.role_side = -1.0
+			g1.role_speed = 2.1
+			g1.drops = 0
+			_place(g1, 0)
+			_face_in_view(g1, 10.0, -4.0)
+			Vfx.spawn_portal(g1.global_position, Color(1.0, 0.62, 0.18), 0.9)
+
+			var g2 := _prepare(HUSK, 0, 0)
+			g2.role_side = 1.0
+			g2.role_speed = 2.1
+			g2.drops = 0
+			_place(g2, 0)
+			_face_in_view(g2, 11.0, 4.0)
+			Vfx.spawn_portal(g2.global_position, Color(1.0, 0.62, 0.18), 0.9)
+
+			var sm := _prepare(JUGGERNAUT, 1, 1)
+			sm.role_scale = 2.5
+			sm.role_speed = 1.35
+			_place(sm, 1)
+			_face_in_view(sm, 14.0, 0.0)
+			Vfx.spawn_portal(sm.global_position, Color(1.0, 0.45, 0.10), 1.8)
+			sm.smashed.connect(_on_smash)
+			_smasher = sm
+			_grabbers = [g1, g2]
+
+			await _delay(1.2)
+			for g in _grabbers:
+				if is_instance_valid(g):
+					g.role = g.Role.CHARGE
+			if is_instance_valid(_smasher):
+				_smasher.role = _smasher.Role.STALK
+		2:
+			# Random from here, but the level keeps its own rules.
+			ui.show_message("NO END TO THEM")
+			_handover = true
+			_start_next_wave()
+
+
+func _check_long_night() -> void:
+	# A wounded medium calls a mini. It runs for every medium in the level, not
+	# just the scripted four — and those minis carry no meat, so the quota can
+	# only come from mediums and giants.
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not e.is_alive() or e.tier != 1:
+			continue
+		var id := e.get_instance_id()
+		if _l4_reinforced.has(id):
+			continue
+		if e.health <= e.max_health * 0.8:
+			_l4_reinforced[id] = true
+			var mini := _prepare(STALKER, 0, e.creature)
+			mini.drops = 0
+			_place(mini, 0)
+			_spot_near(mini, 8.0 + randf() * 4.0)
+			Vfx.spawn_portal(mini.global_position, _portal_color(STALKER), 0.4)
+
+	if _beat_locked:
+		return
+
+	match _beat:
+		0:
+			if is_instance_valid(_l4_warrok) and _l4_warrok.is_alive() 			and _l4_warrok.health <= _l4_warrok.max_health * 0.53:
+				_run_beat(1)
+			elif _l4_warrok != null and (not is_instance_valid(_l4_warrok) or not _l4_warrok.is_alive()):
+				_run_beat(1)
+		1:
+			# The smash ends this beat; _on_smash advances it. If the heavy dies
+			# first, do not stall.
+			if not is_instance_valid(_smasher) or not _smasher.is_alive():
+				_release_grabbers()
+				_run_beat(2)
+
+
 # --- Level 3: the shallows -------------------------------------------------
 #
 # Three 2x monsters, one of each species. Wound any of them to 80% and it calls
@@ -385,6 +500,7 @@ func _check_open_mouth() -> void:
 
 
 func _on_smash(_e: Node) -> void:
+	var next := 2 if Game.world_index != 3 else 2
 	if _beat > 1:
 		return
 	var away: Vector3 = player.global_position - _smasher.global_position
@@ -543,7 +659,7 @@ func _on_enemy_died(e: Node) -> void:
 	for i in count:
 		_spawn_pickup(at + Vector3.UP * 1.2)
 
-	if Game.state != Game.State.PLAYING or _scripted:
+	if Game.state != Game.State.PLAYING or (_scripted and not _handover):
 		return
 
 	# Generic worlds top up as soon as the field thins, rather than waiting for

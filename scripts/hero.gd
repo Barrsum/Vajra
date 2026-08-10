@@ -42,11 +42,17 @@ extends CharacterBody3D
 @export var target_assist_angle := 1.15
 
 @export_group("Look")
-## The UAL character ships untextured — pure white albedo, which blows out
-## completely under the scene's glow. Overriding it is not decoration, it is
-## the difference between a character and a light source.
-@export var body_color := Color(0.30, 0.33, 0.40)
-@export var body_roughness := 0.85
+## The character ships with one surface, white albedo and NO texture map, so
+## there is nothing to preserve — the look has to come from the material.
+## Brushed metal with worn roughness reads far better than flat colour, and
+## needs no UVs because the noise is triplanar.
+@export var body_color := Color(0.26, 0.29, 0.35)
+@export var body_roughness := 0.55
+@export var body_metallic := 0.75
+## Emissive trim. The only warm thing on him, which is what makes him read as
+## powered rather than as a statue.
+@export var trim_color := Color(0.45, 0.75, 1.0)
+@export var trim_energy := 0.55
 
 @export_group("Arm blade")
 @export var blade_bone := "mixamorig_RightForeArm"
@@ -139,11 +145,47 @@ func _style_model(n: Node) -> void:
 			var m := StandardMaterial3D.new()
 			m.albedo_color = body_color
 			m.roughness = body_roughness
-			m.metallic = 0.0
+			m.metallic = body_metallic
+			m.metallic_specular = 0.6
+			# Triplanar wear: no UVs required, and it breaks up the flat sheen
+			# that makes an untextured metal read as plastic.
+			m.roughness_texture = _wear_texture()
+			m.uv1_triplanar = true
+			m.uv1_scale = Vector3(0.35, 0.35, 0.35)
+			# Rim emission so his silhouette holds in the dark world.
+			m.emission_enabled = true
+			m.emission = trim_color
+			m.emission_energy_multiplier = trim_energy
+			m.rim_enabled = true
+			m.rim = 0.6
+			m.rim_tint = 0.4
 			for s in mi.mesh.get_surface_count():
 				mi.set_surface_override_material(s, m)
 	for c in n.get_children():
 		_style_model(c)
+
+
+## Shared wear map. Remapped away from mid-grey, since roughness textures
+## multiply and raw noise would halve the roughness into a mirror finish.
+static var _wear: NoiseTexture2D = null
+
+func _wear_texture() -> NoiseTexture2D:
+	if _wear == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+		n.frequency = 0.06
+		n.fractal_octaves = 4
+		var t := NoiseTexture2D.new()
+		t.width = 256
+		t.height = 256
+		t.seamless = true
+		t.noise = n
+		var grad := Gradient.new()
+		grad.set_color(0, Color(0.35, 0.35, 0.35))
+		grad.set_color(1, Color(0.9, 0.9, 0.9))
+		t.color_ramp = grad
+		_wear = t
+	return _wear
 
 
 func _process(delta: float) -> void:

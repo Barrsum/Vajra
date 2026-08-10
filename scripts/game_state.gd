@@ -121,7 +121,7 @@ func _build_default_worlds() -> void:
 	ocean.display_name = "THE DUST SHALLOWS"
 	ocean.subtitle = "bring a container"
 	ocean.ingredient = "GEL SAC"
-	ocean.ingredient_needed = 16
+	ocean.ingredient_needed = 29
 	ocean.theme = THEME_OCEAN
 	# Scripted: three 2x, reinforcements at 80%, then two 4x arrivals.
 	ocean.scripted = true
@@ -155,11 +155,14 @@ func _build_default_worlds() -> void:
 	night.display_name = "THE LONG NIGHT"
 	night.subtitle = "last item. then dinner."
 	night.ingredient = "CORE SHARD"
-	night.ingredient_needed = 18
+	night.ingredient_needed = 35
 	night.theme = THEME_NIGHT
+	# Scripted, and it never fully hands over: minis are only ever called by a
+	# wounded medium here, and they carry no meat.
+	night.scripted = true
 	night.wave_sizes = [4, 6, 7] as Array[int]
 	night.player_power = 2.5
-	night.size_weights = [0.4, 0.4, 0.2] as Array[float]
+	night.size_weights = [0.0, 0.62, 0.38] as Array[float]
 	night.archetype_weights = [0.15, 0.30, 0.30, 0.25] as Array[float]
 	# everything, weighted toward the heavies
 	night.creature_weights = [0.2, 0.25, 0.25, 0.30] as Array[float]

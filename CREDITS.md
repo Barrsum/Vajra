@@ -12,6 +12,7 @@ so the rule is simply: **add the row when you add the file.**
 | Mixamo animation set (11 clips) | Player locomotion, jump, dodge, attacks, hit, death | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Mutant | Enemy mesh + rig | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Pumpkinhulk L Shaw, Skeletonzombie T Avelange, Warrok W Kurniawan | Enemy meshes. All share Mixamo's skeleton, so they play the existing enemy animation set with zero missing bones | Mixamo (Adobe) | Mixamo Terms | 2026-08-10 |
+| Pumpkinhulk Walking, Injured Walk, Baseball Hit, Standing Melee Attack Backhand / Downward | Pumpkinhulk locomotion and attacks; the level 2 set-piece limp and swing | Mixamo (Adobe) | Mixamo Terms | 2026-08-10 |
 | Mutant animation set (8 clips) | Enemy idle, walk, run, roar, attacks, death | Mixamo (Adobe) | Mixamo Terms | 2026-08-09 |
 | Godot Engine 4.7.1 | Engine | godotengine.org | MIT | 2026-08-09 |
 | GDQuest TPS controller | Four techniques reimplemented, not copied: ground-height camera decoupling, last-strong-direction facing, variable jump height, stopping-speed snap | [gdquest-demos/godot-4-3d-third-person-controller](https://github.com/gdquest-demos/godot-4-3d-third-person-controller) | MIT (source) | 2026-08-09 |

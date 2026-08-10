@@ -34,6 +34,18 @@ func _ready() -> void:
 	var grabbed := false
 	for i in 400:
 		await get_tree().physics_frame
+		if i % 80 == 0:
+			var roles := []
+			for g in arena._grabbers:
+				if is_instance_valid(g):
+					roles.append("%s d=%.1f" % [g.role, g.global_position.distance_to(player.global_position)])
+				else:
+					roles.append("gone")
+			var sr := "gone"
+			if is_instance_valid(arena._smasher):
+				sr = "%s d=%.1f" % [arena._smasher.role,
+					arena._smasher.global_position.distance_to(player.global_position)]
+			print("     t%-3d beat=%d grabbers=%s smasher=%s" % [i, arena._beat, roles, sr])
 		for g in arena._grabbers:
 			if is_instance_valid(g) and g.role == g.Role.HOLD:
 				held = true

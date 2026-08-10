@@ -31,14 +31,26 @@ const MAP := {
 	"Mutant Swiping": ["attack2", false, 3.0],
 	"Standing React Large From Front": ["hit", false, 1.5],
 	"Mutant Dying": ["death", false, 1.5],
+
+	# Creature-specific clips. They live in the same library and the same state
+	# machine; the enemy simply travels to a different state name. One tree for
+	# every creature is far less fragile than a tree per creature.
+	"Pumpkinhulk Walking": ["pk_walk", true, 1.0],
+	"Standing Melee Attack Backhand": ["pk_attack1", false, 1.15],
+	"Standing Melee Attack Downward": ["pk_attack2", false, 1.15],
+	# Set-piece only: the limp and the swing that throws the player.
+	"Injured Walk": ["injured", true, 1.0],
+	"Baseball Hit": ["baseball", false, 1.0],
 }
 
-const STATES := ["telegraph", "attack1", "attack2", "hit", "death"]
+const STATES := ["telegraph", "attack1", "attack2", "hit", "death",
+	"pk_attack1", "pk_attack2", "injured", "baseball"]
 
 ## Blend points are measured from each clip's own root motion, so the stride
 ## matches the speed it plays at.
 var walk_speed := 1.2
 var run_speed := 3.4
+var pk_walk_speed := 1.4
 
 
 func _ready() -> void:
@@ -105,14 +117,30 @@ func _ready() -> void:
 	sm.add_node("locomotion", bs, Vector2(320, 40))
 	print("  blend space: idle@0.0  walk@%.2f  run@%.2f  (measured)" % [walk_speed, run_speed])
 
+	# Pumpkinhulks walk differently, so they get their own blend space rather
+	# than borrowing the Mutant's stride. Same tree, different entry point.
+	var bs2 := AnimationNodeBlendSpace1D.new()
+	bs2.min_space = 0.0
+	bs2.max_space = maxf(run_speed, pk_walk_speed + 0.5)
+	bs2.add_blend_point(_clip("idle"), 0.0, -1, "idle")
+	bs2.add_blend_point(_clip("pk_walk"), maxf(pk_walk_speed, 0.4), -1, "pk_walk")
+	bs2.add_blend_point(_clip("run"), maxf(run_speed, pk_walk_speed + 0.5), -1, "run")
+	sm.add_node("locomotion_pk", bs2, Vector2(320, 130))
+	print("  pumpkin blend: idle@0.0  pk_walk@%.2f  run@%.2f" % [pk_walk_speed, run_speed])
+
 	var x := 60
+	var y := 220
 	for s in STATES:
-		sm.add_node(s, _clip(s), Vector2(x, 220))
+		sm.add_node(s, _clip(s), Vector2(x, y))
 		x += 220
+		if x > 900:
+			x = 60
+			y += 120
 
 	sm.add_transition("Start", "locomotion", _t(0.0))
 	var all := STATES.duplicate()
 	all.append("locomotion")
+	all.append("locomotion_pk")
 	var n := 0
 	for from in all:
 		if from == "death":

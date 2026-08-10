@@ -37,6 +37,7 @@ var _guardian: Node = null      ## the first medium; beat 2 waits on its health
 var _beat_locked := false
 var _grabbers: Array = []
 var _smasher: Node = null
+var _lead: Node = null
 var _spawned_t0 := 0
 var _spawned_t1 := 0
 var _spawned_t2 := 0
@@ -173,42 +174,91 @@ func _beats_open_mouth(b: int) -> void:
 	match b:
 		0:
 			_grabbers.clear()
-			# Two chargers, one per flank, and the heavy hanging back.
-			var g1 := _spawn_in_view(HUSK, 0, 9.0, -3.5, 0.9)
-			g1.set_deferred("role", g1.Role.CHARGE)
+			# Two smalls to pin, one 2.5x heavy to swing. All in frame already.
+			var g1 := _prepare(HUSK, 0, 1)          # small Pumpkinhulk
 			g1.role_side = -1.0
-			g1.role_speed = 2.2
+			g1.role_speed = 2.1
+			_place(g1, 0)
+			_face_in_view(g1, 11.0, -4.0)
+			Vfx.spawn_portal(g1.global_position, Color(1.0, 0.62, 0.18), 0.9)
 
-			var g2 := _spawn_in_view(HUSK, 1, 10.0, 3.5, 1.2)
-			g2.set_deferred("role", g2.Role.CHARGE)
+			var g2 := _prepare(HUSK, 0, 0)          # small Mutant
 			g2.role_side = 1.0
-			g2.role_speed = 1.9
+			g2.role_speed = 2.1
+			_place(g2, 0)
+			_face_in_view(g2, 12.0, 4.0)
+			Vfx.spawn_portal(g2.global_position, Color(1.0, 0.62, 0.18), 0.9)
 
-			_grabbers = [g1, g2]
-
-			# Close enough that the wait is dread rather than tedium: a limp at
-			# ~2.3 m/s from 10m is about four seconds of being held.
-			var sm := _spawn_in_view(JUGGERNAUT, 1, 10.5, 0.0, 1.6)
-			sm.creature = 1                      # Pumpkinhulk
-			sm.role_speed = 1.55                 # a limp, not a charge
-			sm.set_deferred("role", sm.Role.STALK)
+			var sm := _prepare(JUGGERNAUT, 1, 1)    # 2.5x Pumpkinhulk
+			sm.role_scale = 2.5
+			sm.role_speed = 1.35
+			_place(sm, 1)
+			_face_in_view(sm, 15.0, 0.0)
+			Vfx.spawn_portal(sm.global_position, Color(1.0, 0.45, 0.10), 1.8)
 			sm.smashed.connect(_on_smash)
 			_smasher = sm
+
+			_grabbers = [g1, g2]
 			ui.show_message("THEY WERE WAITING")
+
+			# A beat to register the ambush before anything moves. Being grabbed
+			# the instant you arrive reads as a bug, not a trap.
+			await _delay(1.5)
+			for g in _grabbers:
+				if is_instance_valid(g):
+					g.role = g.Role.CHARGE
+			if is_instance_valid(_smasher):
+				_smasher.role = _smasher.Role.STALK
 		1:
 			ui.show_message("HELD")
 		2:
-			# Thrown clear, and the ground you land on is not empty.
-			await _delay(0.9)
+			# Thrown clear, into a field that is already occupied.
+			await _delay(0.8)
 			ui.show_message("GET UP")
-			for i in 7:
-				await _delay(0.25)
-				_spawn_near(HUSK if i % 2 == 0 else STALKER, 0, 14.0 + randf() * 8.0)
+			for i in 8:
+				await _delay(0.22)
+				_spawn_near(HUSK if i % 2 == 0 else STALKER, 0, 13.0 + randf() * 9.0)
+			# One 2x Mutant anchors the aftermath; wearing it down summons the
+			# next heavy, and only then does the world go random.
+			var lead := _prepare(RAVAGER, 1, 0)
+			_place(lead, 1)
+			_spot_near(lead, 16.0)
+			Vfx.spawn_portal(lead.global_position, Color(1.0, 0.45, 0.9), 1.2)
+			_lead = lead
+		3:
+			ui.show_message("ANOTHER ONE")
+			var pk := _prepare(JUGGERNAUT, 1, 1)
+			_place(pk, 1)
+			_spot_near(pk, 18.0)
+			Vfx.spawn_portal(pk.global_position, Color(1.0, 0.45, 0.10), 1.5)
+		4:
+			# Handing over to the generic loop from here.
+			_scripted = false
+			_start_next_wave()
+
+
+## Places an already-added enemy downrange and in the player's view.
+func _face_in_view(e: Node3D, distance: float, side: float) -> void:
+	var cam := player.get_node_or_null("CameraController")
+	var fwd := Vector3.FORWARD
+	if cam:
+		fwd = cam.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 0.001 else Vector3.FORWARD
+	var right := Vector3(-fwd.z, 0.0, fwd.x)
+	e.global_position = player.global_position + fwd * distance + right * side + Vector3.UP * 0.6
+
+
+func _spot_near(e: Node3D, radius: float) -> void:
+	var a := randf() * TAU
+	e.global_position = player.global_position + Vector3(sin(a) * radius, 0.6, cos(a) * radius)
 
 
 func _check_open_mouth() -> void:
 	match _beat:
 		0:
+			if _beat_locked:
+				return
 			# Both arms taken, or the player killed one before it landed.
 			var holding := 0
 			var lost := 0
@@ -224,6 +274,15 @@ func _check_open_mouth() -> void:
 			if not is_instance_valid(_smasher) or not _smasher.is_alive():
 				_release_grabbers()
 				_run_beat(2)
+		2:
+			# Wearing the lead Mutant to 60% calls in the next heavy.
+			if not is_instance_valid(_lead) or not _lead.is_alive():
+				_run_beat(3)
+			elif _lead.health <= _lead.max_health * 0.6:
+				_run_beat(3)
+		3:
+			if _alive <= 3:
+				_run_beat(4)
 
 
 func _on_smash(_e: Node) -> void:
@@ -284,11 +343,21 @@ func _start_next_wave() -> void:
 
 # --- spawning ---------------------------------------------------------------
 
-func _make(archetype: int, tier: int) -> CharacterBody3D:
+## Instantiates and configures WITHOUT adding to the tree. Creature and scale
+## are consumed in _enter_tree/_ready, so they must be set before that.
+func _prepare(archetype: int, tier: int, creature := -1) -> CharacterBody3D:
 	var e: CharacterBody3D = enemy_scene.instantiate()
-	e.set_creature(_roll_weighted(_world_weights("creature_weights")))
+	e.set_creature(creature if creature >= 0 else _roll_weighted(_world_weights("creature_weights")))
 	e.set_archetype(archetype)
 	e.set_tier(tier)
+	return e
+
+
+func _make(archetype: int, tier: int) -> CharacterBody3D:
+	return _place(_prepare(archetype, tier), tier)
+
+
+func _place(e: CharacterBody3D, tier: int) -> CharacterBody3D:
 	add_child(e)
 	e.player = player
 	e.died.connect(_on_enemy_died)

@@ -108,8 +108,16 @@ enum Role { FREE, CHARGE, HOLD, STALK, SMASH, DONE }
 var role := Role.FREE
 var role_side := 1.0        ## which arm a HOLD actor takes
 var role_speed := 1.0
+## Overrides the tier's size when > 0. The set-piece heavy is 2.5x, which is
+## between Brute and Colossus and belongs to no tier.
+var role_scale := 0.0
 var _role_t := 0.0
 var _smash_hit := false
+var _tether: MeshInstance3D = null
+## Latched on the first CHARGE frame. Recomputing the flank each tick makes
+## the target orbit the player as the approach angle changes, so a charger
+## closes to arm's length and then circles forever without ever arriving.
+var _hold_dir := Vector3.ZERO
 signal smashed(enemy)
 var drops := 1
 
@@ -179,7 +187,8 @@ func _ready() -> void:
 	anim_tree.active = true
 	_sm = anim_tree.get("parameters/playback")
 
-	scale = Vector3.ONE * float(TIERS[tier]["scale"]) * float(CREATURES[creature]["scale"])
+	var body: float = role_scale if role_scale > 0.0 else float(TIERS[tier]["scale"])
+	scale = Vector3.ONE * body * float(CREATURES[creature]["scale"])
 	_collect_materials(model)
 
 
@@ -347,11 +356,12 @@ func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
 		Role.CHARGE:
 			# Run for the player's flank, not their centre, so two chargers end
 			# up on opposite arms rather than fighting for the same spot.
-			var side := Vector3(-to_player.z, 0.0, to_player.x) * role_side
-			var mark: Vector3 = player.global_position + side * 0.85
+			if _hold_dir == Vector3.ZERO:
+				_hold_dir = Vector3(-to_player.z, 0.0, to_player.x).normalized() * role_side
+			var mark: Vector3 = player.global_position + _hold_dir * _hold_reach()
 			var to_mark: Vector3 = mark - global_position
 			to_mark.y = 0.0
-			if to_mark.length() < 1.3:
+			if to_mark.length() < 1.6:
 				role = Role.HOLD
 				_role_t = 0.0
 				if player.has_method("set_grabbed"):
@@ -360,11 +370,12 @@ func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
 				wish = to_mark.normalized() * move_speed * role_speed
 
 		Role.HOLD:
-			# Pinned to the arm. Snapped rather than steered, or the grip drifts.
-			var side2 := Vector3(-to_player.z, 0.0, to_player.x) * role_side
-			var mark2: Vector3 = player.global_position + side2 * 0.85
-			global_position = global_position.lerp(mark2, 1.0 - exp(-14.0 * delta))
+			# They touch, then back off to arm's length. The grip is the beam,
+			# not the body — standing inside the player reads as clipping.
+			var mark2: Vector3 = player.global_position + _hold_dir * _hold_reach()
+			global_position = global_position.lerp(mark2, 1.0 - exp(-9.0 * delta))
 			velocity = Vector3.ZERO
+			_update_tether()
 
 		Role.STALK:
 			if dist > reach * 0.95:
@@ -377,14 +388,16 @@ func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
 
 		Role.SMASH:
 			# Long wind-up, then one enormous connect.
-			if not _smash_hit and _role_t >= 0.85:
+			if not _smash_hit and _role_t >= 1.15:
 				_smash_hit = true
 				smashed.emit(self)
-			if _role_t >= 1.6:
+			if _role_t >= 2.2:
 				role = Role.FREE
 
 		Role.DONE:
 			role = Role.FREE
+		_:
+			_clear_tether()
 
 	var rate := 14.0
 	velocity.x = move_toward(velocity.x, wish.x, rate * delta)
@@ -401,13 +414,16 @@ func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
 
 	match role:
 		Role.HOLD:
-			_travel("attack2")
+			_travel(_atk_state(true))
 		Role.SMASH:
-			_travel("attack1")
+			_travel("baseball")
+		Role.STALK:
+			# The limp. A looping clip, so speed is carried by movement not by
+			# the animation.
+			_travel("injured")
 		_:
-			_travel("locomotion")
-			anim_tree.set("parameters/locomotion/blend_position",
-				Vector2(velocity.x, velocity.z).length())
+			_travel(_loco_state())
+			anim_tree.set(_blend_path(), Vector2(velocity.x, velocity.z).length())
 	_apply_materials()
 
 
@@ -430,6 +446,62 @@ func _separate(delta: float) -> void:
 			# sends a crowd flying — which is exactly what it did.
 			var push: float = minf((min_d - dist), 0.5) * 6.0 				* (1.0 if tier <= other.tier else 0.35)
 			global_position += d.normalized() * push * delta
+
+
+## How far out a holder settles. Scaled by body size so a big one does not end
+## up standing on top of the player.
+func _hold_reach() -> float:
+	return 2.4 * maxf(scale.x, 0.6)
+
+
+## The energy link. Drawn from chest height to the player, rebuilt each frame,
+## because the two ends move independently.
+func _update_tether() -> void:
+	if _tether == null:
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(1.0, 0.62, 0.18, 0.55)
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.09
+		cm.bottom_radius = 0.09
+		cm.height = 1.0
+		cm.radial_segments = 8
+		_tether = MeshInstance3D.new()
+		_tether.mesh = cm
+		_tether.material_override = mat
+		_tether.top_level = true      # world space: it must not inherit body scale
+		add_child(_tether)
+
+	var a: Vector3 = global_position + Vector3.UP * (1.3 * scale.y)
+	var b: Vector3 = player.global_position + Vector3.UP * 1.1
+	var mid := (a + b) * 0.5
+	var dir := b - a
+	var len := dir.length()
+	if len < 0.05:
+		return
+	_tether.visible = true
+	_tether.global_position = mid
+	# Cylinders are built along +Y, so aim +Y down the link.
+	_tether.global_basis = Basis(_axis_to(dir.normalized())).scaled(Vector3(1, len, 1))
+	var m: StandardMaterial3D = _tether.material_override
+	m.albedo_color.a = 0.35 + sin(_role_t * 11.0) * 0.18
+
+
+func _axis_to(up: Vector3) -> Quaternion:
+	var from := Vector3.UP
+	if from.dot(up) > 0.9999:
+		return Quaternion.IDENTITY
+	if from.dot(up) < -0.9999:
+		return Quaternion(Vector3.RIGHT, PI)
+	return Quaternion(from.cross(up).normalized(), acos(clampf(from.dot(up), -1.0, 1.0)))
+
+
+func _clear_tether() -> void:
+	if _tether:
+		_tether.visible = false
 
 
 func _maybe_burst(dist: float) -> void:
@@ -548,11 +620,26 @@ func _update_animation() -> void:
 			_travel("telegraph")
 		State.STRIKE, State.RECOVER, State.LINK:
 			# Alternate hands down the chain so a combo reads as a sequence.
-			_travel("attack1" if _combo_i % 2 == 0 else "attack2")
+			_travel(_atk_state(_combo_i % 2 == 1))
 		_:
-			_travel("locomotion")
-			anim_tree.set("parameters/locomotion/blend_position",
-				Vector2(velocity.x, velocity.z).length())
+			_travel(_loco_state())
+			anim_tree.set(_blend_path(), Vector2(velocity.x, velocity.z).length())
+
+
+## Pumpkinhulks have their own walk and their own two attacks. Everything lives
+## in one state machine; only the entry name changes.
+func _loco_state() -> String:
+	return "locomotion_pk" if creature == 1 else "locomotion"
+
+
+func _atk_state(second: bool) -> String:
+	if creature == 1:
+		return "pk_attack2" if second else "pk_attack1"
+	return "attack2" if second else "attack1"
+
+
+func _blend_path() -> String:
+	return "parameters/%s/blend_position" % _loco_state()
 
 
 func _travel(s: String) -> void:

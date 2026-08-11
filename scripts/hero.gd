@@ -41,6 +41,12 @@ extends CharacterBody3D
 @export var attack_cancel_at := 0.62
 @export var target_assist_angle := 1.15
 
+@export_group("Health orbs")
+## Carried, not auto-consumed. Spending one is a decision made under pressure,
+## which is the whole point of a manual heal.
+@export var max_health_orbs := 5
+@export var health_orb_restore := 40.0
+
 @export_group("Look")
 ## The character ships with one surface, white albedo and NO texture map, so
 ## there is nothing to preserve — the look has to come from the material.
@@ -123,6 +129,10 @@ var power := 1.0
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
 ## held, not like a cutscene.
+var health_orbs := 0
+signal orbs_changed(have: int, cap: int)
+signal hurt_flash()
+
 var grabbed := false
 var _launch_lock := 0.0
 
@@ -255,6 +265,8 @@ func _physics_process(delta: float) -> void:
 			_try_dodge()
 		if Input.is_action_just_pressed("attack"):
 			_try_attack()
+	if alive and Input.is_action_just_pressed("heal"):
+		_use_health_orb()
 
 	_move_direction = Vector3.ZERO if locked else _get_camera_oriented_input()
 	if _move_direction.length() > 0.2:
@@ -481,6 +493,7 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	add_trauma(0.55)
 	hit_stop(0.05)
 	Sfx.play_at(&"hurt", global_position + Vector3.UP)
+	hurt_flash.emit()
 	# Taking a hit cancels your swing. Trading blows should never be free — this
 	# is what makes their attacks feel like an interruption rather than chip.
 	_attack_index = 0
@@ -522,6 +535,26 @@ func launch(dir: Vector3, force: float, lift: float) -> void:
 
 func is_launched() -> bool:
 	return _launch_lock > 0.0
+
+
+## Returns false when the stock is full, which is what makes the orb bounce
+## back off the player instead of vanishing.
+func add_health_orb() -> bool:
+	if health_orbs >= max_health_orbs:
+		return false
+	health_orbs += 1
+	orbs_changed.emit(health_orbs, max_health_orbs)
+	return true
+
+
+func _use_health_orb() -> void:
+	if health_orbs <= 0 or health >= max_health:
+		return
+	health_orbs -= 1
+	health = minf(max_health, health + health_orb_restore)
+	orbs_changed.emit(health_orbs, max_health_orbs)
+	Sfx.play_at(&"morph" if false else &"impact_light", global_position + Vector3.UP, -4.0)
+	Vfx.morph(global_position + Vector3.UP * 1.1)
 
 
 func is_invulnerable() -> bool:

@@ -162,7 +162,8 @@ func _build_default_worlds() -> void:
 	night.scripted = true
 	night.wave_sizes = [4, 6, 7] as Array[int]
 	night.player_power = 2.5
-	night.size_weights = [0.0, 0.62, 0.38] as Array[float]
+	# Equal odds once it goes random: a 4x is as likely as a 2x.
+	night.size_weights = [0.0, 0.5, 0.5] as Array[float]
 	night.archetype_weights = [0.15, 0.30, 0.30, 0.25] as Array[float]
 	# everything, weighted toward the heavies
 	night.creature_weights = [0.2, 0.25, 0.25, 0.30] as Array[float]

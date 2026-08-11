@@ -14,6 +14,17 @@ anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("2_bars")
 
+[node name="Hurt" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+modulate = Color(1, 1, 1, 0)
+expand_mode = 1
+stretch_mode = 6
+
 [node name="Hud" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 15
@@ -46,6 +57,34 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 7
 theme_override_font_sizes/font_size = 32
 text = "SCRAP MEAT   0 / 10"
+
+[node name="HealthBar" type="Control" parent="Hud/TopLeft"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 18)
+layout_mode = 2
+
+[node name="Track" type="ColorRect" parent="Hud/TopLeft/HealthBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.08, 0.07, 0.08, 0.85)
+
+[node name="Fill" type="ColorRect" parent="Hud/TopLeft/HealthBar"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 300.0
+offset_bottom = 18.0
+color = Color(0.35, 0.85, 0.4, 1)
+
+[node name="Orbs" type="Label" parent="Hud/TopLeft"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.34, 0.34, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 17
+text = "ORBS"
 
 [node name="Health" type="Label" parent="Hud/TopLeft"]
 unique_name_in_owner = true

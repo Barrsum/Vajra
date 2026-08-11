@@ -267,6 +267,13 @@ func _physics_process(delta: float) -> void:
 		_scripted(delta, to_player, dist)
 		return
 
+	# While the player is pinned, everything else stops fighting and closes into
+	# a ring to watch. It turns the grab into a staged moment instead of a free
+	# hit for the whole field — and makes the release land harder.
+	if player.get("grabbed") == true:
+		_spectate(delta, to_player, dist)
+		return
+
 	match state:
 		State.CHASE:
 			if _has_token or _take_token():
@@ -458,6 +465,36 @@ func _separate(delta: float) -> void:
 			# sends a crowd flying — which is exactly what it did.
 			var push: float = minf((min_d - dist), 0.5) * 6.0 				* (1.0 if tier <= other.tier else 0.35)
 			global_position += d.normalized() * push * delta
+
+
+## Forms a ring at watching distance. No attacks, no tokens held.
+func _spectate(delta: float, to_player: Vector3, dist: float) -> void:
+	_release_token()
+	_combo_i = 0
+	if state != State.CHASE:
+		_set_state(State.CHASE)
+
+	const RING := 6.5
+	var tangent := Vector3(-to_player.z, 0.0, to_player.x) * _circle_side
+	var keep := (dist - RING) * 1.1
+	var wish := tangent * move_speed * 0.35 + to_player * keep
+
+	velocity.x = move_toward(velocity.x, wish.x, 9.0 * delta)
+	velocity.z = move_toward(velocity.z, wish.z, 9.0 * delta)
+	if not is_on_floor():
+		velocity.y -= 20.0 * delta
+	else:
+		velocity.y = 0.0
+	move_and_slide()
+
+	if dist > 0.05:
+		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
+		visual.rotation.y = _facing
+
+	_separate(delta)
+	_travel(_loco_state())
+	anim_tree.set(_blend_path(), Vector2(velocity.x, velocity.z).length())
+	_apply_materials()
 
 
 ## How far out a holder settles. Scaled by body size so a big one does not end

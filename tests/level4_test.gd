@@ -42,18 +42,32 @@ func _ready() -> void:
 	_dump("giant")
 	await _shot("l4-02-warrok")
 
-	# Wounding a medium to 80% should call a mini that carries no meat.
+	# A medium worn to 30% calls a mini, and that mini drops a health orb.
 	var before := _by_tier(0).size()
-	meds[0].take_damage(meds[0].max_health * 0.25, meds[0].global_position + Vector3.FORWARD, 0.0)
-	await _wait(120)
+	meds[0].take_damage(meds[0].max_health * 0.75, meds[0].global_position + Vector3.FORWARD, 0.0)
+	await _wait(140)
 	var minis := _by_tier(0)
-	_check("wounded medium calls a mini", minis.size() > before)
+	_check("30%% calls a mini", minis.size() > before)
 	_check("minis carry no meat", _all_zero_drops(minis))
 
-	# 53% on the Warrok repeats the ambush.
-	var wk = giants[0]
-	wk.take_damage(wk.max_health * 0.5, wk.global_position + Vector3.FORWARD, 0.0)
-	await _wait(200)
+	# Killing that mini should leave a health orb, not an ingredient.
+	if not minis.is_empty():
+		minis[0].take_damage(99999.0, minis[0].global_position + Vector3.FORWARD, 0.0)
+		await _wait(60)
+		_check("mini drops a health orb", _health_orbs_on_ground() >= 1)
+
+	# The orb stock caps, and the cap is what makes a sixth bounce off.
+	for i in 6:
+		player.add_health_orb()
+	_check("orb stock caps at 5", player.health_orbs == 5)
+	_check("sixth orb refused", player.add_health_orb() == false)
+
+	# The trap springs when the LAST of the opening four is worn to 53%.
+	for i in [1, 2, 3]:
+		meds[i].take_damage(99999.0, meds[i].global_position + Vector3.FORWARD, 0.0)
+	await _wait(80)
+	meds[0].take_damage(meds[0].max_health * 0.2, meds[0].global_position + Vector3.FORWARD, 0.0)
+	await _wait(220)
 	_check("ambush repeats", arena._grabbers.size() == 2)
 	_check("beat advanced", arena._beat >= 1)
 	_dump("ambush")
@@ -88,6 +102,15 @@ func _species(list: Array) -> Dictionary:
 	for e in list:
 		o[e.creature] = true
 	return o
+
+
+## Health orbs sitting on the ground, identified by kind rather than colour.
+func _health_orbs_on_ground() -> int:
+	var n := 0
+	for c in arena.get_children():
+		if c.get_script() != null and "kind" in c and c.kind == 1:
+			n += 1
+	return n
 
 
 func _all_zero_drops(list: Array) -> bool:

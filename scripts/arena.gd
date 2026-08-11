@@ -47,6 +47,7 @@ var _l3_giant_a := -1
 ## Stays scripted forever: reinforcement is the level's rule, not an opening.
 var _handover := false
 var _l4_warrok: Node = null
+var _l4_mediums: Array = []
 var _l4_reinforced := {}   ## instance ids of mediums that already called help
 var _spawned_t0 := 0
 var _spawned_t1 := 0
@@ -55,6 +56,7 @@ var _spawned_t2 := 0
 
 func _ready() -> void:
 	ui.player = player
+	ui._bind_player()
 	_apply_mood()
 	var w: Resource = Game.current_world()
 	_scripted = w != null and w.scripted
@@ -290,6 +292,7 @@ func _beats_long_night(b: int) -> void:
 	match b:
 		0:
 			_l4_reinforced.clear()
+			_l4_mediums.clear()
 			ui.show_message("ALL OF THEM")
 			for c in [0, 1, 2, 3]:
 				await _delay(0.3)
@@ -298,6 +301,7 @@ func _beats_long_night(b: int) -> void:
 				# Close together, so the opening is one crowd, not four fights.
 				_face_in_view(e, 12.0 + randf() * 2.0, -5.0 + float(c) * 3.4)
 				Vfx.spawn_portal(e.global_position, _portal_color(HUSK), 1.0)
+				_l4_mediums.append(e)
 
 			await _delay(5.0)
 			ui.show_message("SOMETHING IS COMING")
@@ -359,7 +363,7 @@ func _check_long_night() -> void:
 		var id := e.get_instance_id()
 		if _l4_reinforced.has(id):
 			continue
-		if e.health <= e.max_health * 0.8:
+		if e.health <= e.max_health * 0.3:
 			_l4_reinforced[id] = true
 			var mini := _prepare(STALKER, 0, e.creature)
 			mini.drops = 0
@@ -372,10 +376,17 @@ func _check_long_night() -> void:
 
 	match _beat:
 		0:
-			if is_instance_valid(_l4_warrok) and _l4_warrok.is_alive() 			and _l4_warrok.health <= _l4_warrok.max_health * 0.53:
-				_run_beat(1)
-			elif _l4_warrok != null and (not is_instance_valid(_l4_warrok) or not _l4_warrok.is_alive()):
-				_run_beat(1)
+			# The trap springs when the LAST of the opening four is worn to 53%,
+			# so it lands at the end of that fight rather than during it.
+			var live := []
+			for m in _l4_mediums:
+				if is_instance_valid(m) and m.is_alive():
+					live.append(m)
+			if _l4_mediums.size() == 4 and live.size() <= 1:
+				if live.is_empty():
+					_run_beat(1)
+				elif live[0].health <= live[0].max_health * 0.53:
+					_run_beat(1)
 		1:
 			# The smash ends this beat; _on_smash advances it. If the heavy dies
 			# first, do not stall.
@@ -654,10 +665,19 @@ func _on_enemy_died(e: Node) -> void:
 	# sphere, which is what makes clearing an area feel like collecting.
 	var w: Resource = Game.current_world()
 	var per_kill: int = w.drop_per_kill if w else 1
-	var count: int = per_kill * (e.drops if "drops" in e else 1)
 	var at: Vector3 = e.global_position if is_instance_valid(e) else player.global_position
-	for i in count:
-		_spawn_pickup(at + Vector3.UP * 1.2)
+
+	# In the long night a mini carries no meat at all — it carries a health orb.
+	# That is what makes the small ones worth killing without making them a way
+	# to farm the quota.
+	if Game.world_index == 3 and "tier" in e and e.tier == 0:
+		_spawn_pickup(at + Vector3.UP * 1.2, true)
+		if Game.state != Game.State.PLAYING or (_scripted and not _handover):
+			return
+	else:
+		var count: int = per_kill * (e.drops if "drops" in e else 1)
+		for i in count:
+			_spawn_pickup(at + Vector3.UP * 1.2)
 
 	if Game.state != Game.State.PLAYING or (_scripted and not _handover):
 		return
@@ -670,12 +690,14 @@ func _on_enemy_died(e: Node) -> void:
 			_start_next_wave()
 
 
-func _spawn_pickup(at: Vector3) -> void:
+func _spawn_pickup(at: Vector3, health := false) -> void:
 	var p := Node3D.new()
 	p.set_script(PickupScript)
+	p.kind = 1 if health else 0      # Pickup.Kind.HEALTH / INGREDIENT
 	add_child(p)
 	p.global_position = at
 	p.player = player
-	var w: Resource = Game.current_world()
-	if w:
-		p.color = w.accent_color.lightened(0.25)
+	if not health:
+		var w: Resource = Game.current_world()
+		if w:
+			p.color = w.accent_color.lightened(0.25)

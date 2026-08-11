@@ -7,6 +7,10 @@ extends CanvasLayer
 @onready var _world: Label = %WorldName
 @onready var _quota: Label = %Quota
 @onready var _health: Label = %Health
+@onready var _bar: Control = %HealthBar
+@onready var _fill: ColorRect = %Fill
+@onready var _orbs: Label = %Orbs
+@onready var _hurt: TextureRect = %Hurt
 @onready var _banner: Label = %Banner
 
 @onready var _overlay: Control = %Overlay
@@ -19,6 +23,7 @@ extends CanvasLayer
 
 var player: Node = null
 var _banner_t := 0.0
+var _hurt_t := 0.0
 
 
 func _ready() -> void:
@@ -36,9 +41,30 @@ func _ready() -> void:
 	_on_collected(Game.collected, Game.needed())
 
 
+## Dark at the edges, clear in the middle — a hurt cue you read peripherally
+## without it covering what you are fighting.
+func _vignette(size := 128) -> ImageTexture:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var c := (size - 1) * 0.5
+	for y in size:
+		for x in size:
+			var d: float = Vector2(x - c, y - c).length() / c
+			var a: float = clampf((d - 0.45) / 0.55, 0.0, 1.0)
+			img.set_pixel(x, y, Color(0.85, 0.05, 0.06, a * a))
+	return ImageTexture.create_from_image(img)
+
+
 func _process(delta: float) -> void:
+	if _hurt_t > 0.0:
+		_hurt_t = maxf(0.0, _hurt_t - delta * 2.4)
+		_hurt.modulate.a = _hurt_t * 0.55
+
 	if is_instance_valid(player) and "health" in player:
-		_health.text = "HP  %d" % roundi(player.health)
+		_health.text = "HP  %d / %d" % [roundi(player.health), roundi(player.max_health)]
+		var frac: float = clampf(player.health / maxf(player.max_health, 0.001), 0.0, 1.0)
+		_fill.size.x = _bar.size.x * frac
+		# Same two-stage ramp as the enemy bars, so both read the same way.
+		_fill.color = Color(0.96, 0.84, 0.20).lerp(Color(0.35, 0.85, 0.40), (frac - 0.5) * 2.0) 			if frac > 0.5 else Color(0.94, 0.20, 0.16).lerp(Color(0.96, 0.84, 0.20), frac * 2.0)
 		if "alive" in player and not player.alive and Game.state == Game.State.PLAYING:
 			Game.player_died()
 
@@ -55,6 +81,25 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # --- feed -------------------------------------------------------------------
+
+func _bind_player() -> void:
+	if not is_instance_valid(player):
+		return
+	if player.has_signal("orbs_changed") and not player.orbs_changed.is_connected(_on_orbs):
+		player.orbs_changed.connect(_on_orbs)
+	if player.has_signal("hurt_flash") and not player.hurt_flash.is_connected(_on_hurt):
+		player.hurt_flash.connect(_on_hurt)
+	_on_orbs(player.health_orbs, player.max_health_orbs)
+
+
+func _on_orbs(have: int, cap: int) -> void:
+	# Filled and empty pips, so the stock is countable at a glance.
+	_orbs.text = "ORBS  " + "*".repeat(have) + "-".repeat(maxi(cap - have, 0)) 		+ ("     H TO USE" if have > 0 else "")
+
+
+func _on_hurt() -> void:
+	_hurt_t = 1.0
+
 
 func _on_world_started(w, index: int) -> void:
 	_world.text = "%d / %d   %s" % [index + 1, Game.worlds.size(), w.display_name]

@@ -46,13 +46,14 @@ extends CharacterBody3D
 ## there is nothing to preserve — the look has to come from the material.
 ## Brushed metal with worn roughness reads far better than flat colour, and
 ## needs no UVs because the noise is triplanar.
-@export var body_color := Color(0.26, 0.29, 0.35)
-@export var body_roughness := 0.55
-@export var body_metallic := 0.75
-## Emissive trim. The only warm thing on him, which is what makes him read as
-## powered rather than as a statue.
-@export var trim_color := Color(0.45, 0.75, 1.0)
-@export var trim_energy := 0.55
+## Neutral metal, deliberately uncoloured. A tint would fight whatever texture
+## gets painted on later, so the base stays honest grey.
+@export var body_color := Color(0.62, 0.63, 0.65)
+@export var body_roughness := 0.62
+@export var body_metallic := 0.55
+## Optional texture. Drop a PNG here in the Inspector and it is used directly —
+## no code change needed. Leave empty for plain metal.
+@export var body_texture: Texture2D = null
 
 @export_group("Arm blade")
 @export var blade_bone := "mixamorig_RightForeArm"
@@ -146,19 +147,15 @@ func _style_model(n: Node) -> void:
 			m.albedo_color = body_color
 			m.roughness = body_roughness
 			m.metallic = body_metallic
-			m.metallic_specular = 0.6
-			# Triplanar wear: no UVs required, and it breaks up the flat sheen
-			# that makes an untextured metal read as plastic.
-			m.roughness_texture = _wear_texture()
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3(0.35, 0.35, 0.35)
-			# Rim emission so his silhouette holds in the dark world.
-			m.emission_enabled = true
-			m.emission = trim_color
-			m.emission_energy_multiplier = trim_energy
-			m.rim_enabled = true
-			m.rim = 0.6
-			m.rim_tint = 0.4
+			if body_texture:
+				# A painted texture uses the mesh's own UVs, so triplanar is off.
+				m.albedo_texture = body_texture
+			else:
+				# No texture: break up the flat sheen with triplanar wear, which
+				# needs no UVs. Untextured metal reads as plastic without it.
+				m.roughness_texture = _wear_texture()
+				m.uv1_triplanar = true
+				m.uv1_scale = Vector3(0.35, 0.35, 0.35)
 			for s in mi.mesh.get_surface_count():
 				mi.set_surface_override_material(s, m)
 	for c in n.get_children():

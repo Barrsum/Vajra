@@ -241,6 +241,114 @@ func impact_flash(pos: Vector3, color: Color, size := 1.0) -> void:
 	tw.chain().tween_callback(q.queue_free)
 
 
+# --- death companions -------------------------------------------------------
+
+## Slow drifting embers that float up as they fade. Warm deaths.
+func embers(pos: Vector3, color: Color, count := 26) -> void:
+	_emit(pos, count, Vector3.UP, 55.0, 1.2, 4.0, 1.5, color, -1.2, 0.5, 1.6)
+
+
+## Fast, hard, low-spread chunks. Cold deaths that break rather than burn.
+func shards(pos: Vector3, color: Color, count := 24) -> void:
+	_emit(pos, count, Vector3.UP, 120.0, 9.0, 18.0, 0.55, color, 26.0, 0.7, 2.2)
+
+
+## A slow column lifting away. Vapour and dispersal.
+func rise(pos: Vector3, color: Color, count := 24) -> void:
+	_emit(pos, count, Vector3.UP, 16.0, 1.0, 2.6, 2.2, color, -2.4, 0.8, 2.0)
+
+
+## Collapse inward: a ring snapping shut, then one bright point.
+func implode(pos: Vector3, color: Color) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.7)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.9
+	tm.outer_radius = 1.05
+	ring.mesh = tm
+	ring.material_override = mat
+	add_child(ring)
+	ring.global_position = pos
+	ring.scale = Vector3(3.4, 1.0, 3.4)
+
+	var tw := create_tween()
+	tw.tween_property(ring, "scale", Vector3(0.12, 0.5, 0.12), 0.5)		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		impact_flash(pos, Color(1, 1, 1), 1.6)
+		_emit(pos, 20, Vector3.UP, 180.0, 6.0, 12.0, 0.5, color, 6.0, 0.5, 1.4))
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.12)
+	tw.tween_callback(ring.queue_free)
+
+
+# --- hit dressing -----------------------------------------------------------
+
+## A crescent left in the air along the swing. Reads as the cut itself.
+func slash_arc(pos: Vector3, dir: Vector3, color: Color, size := 1.0) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.75)
+	mat.albedo_texture = _dot_texture()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var q := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(2.6, 0.42) * size
+	q.mesh = qm
+	q.material_override = mat
+	add_child(q)
+	q.global_position = pos
+	if dir.length_squared() > 0.001:
+		q.look_at(pos + Vector3.UP, dir.normalized())
+	q.rotate_object_local(Vector3.FORWARD, randf_range(-0.6, 0.6))
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(q, "scale", Vector3(1.5, 0.4, 1.0), 0.22)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.22)
+	tw.chain().tween_callback(q.queue_free)
+
+
+## A tight vertical ring at the contact point — a punchier alternative to the
+## ground shockwave, for hits that land in the air rather than on the floor.
+func burst_ring(pos: Vector3, color: Color, size := 1.0) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.8)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.55
+	tm.outer_radius = 0.72
+	ring.mesh = tm
+	ring.material_override = mat
+	add_child(ring)
+	ring.global_position = pos
+	ring.rotation = Vector3(PI * 0.5, randf() * TAU, 0.0)
+	ring.scale = Vector3.ONE * 0.25
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ring, "scale", Vector3.ONE * (1.8 * size), 0.26)		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.26)
+	tw.chain().tween_callback(ring.queue_free)
+
+
+## A tight cone of fast fragments straight down the swing line.
+func shard_spray(pos: Vector3, dir: Vector3, color: Color) -> void:
+	_emit(pos, 18, dir.normalized(), 22.0, 12.0, 22.0, 0.34, color, 14.0, 0.4, 1.2)
+
+
 ## The arm blade materialising.
 func morph(pos: Vector3) -> void:
 	_emit(pos, 26, Vector3.UP, 140.0,

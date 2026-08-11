@@ -104,7 +104,7 @@ var creature := 0
 
 ## Set-piece roles. When one is active the normal brain is bypassed entirely —
 ## a scripted actor must not be pulled off its mark by circling logic.
-enum Role { FREE, CHARGE, HOLD, STALK, SMASH, DONE }
+enum Role { FREE, CHARGE, HOLD, STALK, SMASH, DONE, WANDER }
 var role := Role.FREE
 var role_side := 1.0        ## which arm a HOLD actor takes
 var role_speed := 1.0
@@ -118,6 +118,11 @@ var _tether: MeshInstance3D = null
 ## the target orbit the player as the approach angle changes, so a charger
 ## closes to arm's length and then circles forever without ever arriving.
 var _hold_dir := Vector3.ZERO
+## Set once when the player dies. Standing over a corpse hitting it forever
+## looks broken; they celebrate, disengage, and go back to milling about.
+var _discharged := false
+var _wander_to := Vector3.ZERO
+var _wander_t := 0.0
 signal smashed(enemy)
 var drops := 1
 
@@ -150,6 +155,38 @@ var _mesh_surfaces: Array = []   # [[MeshInstance3D, surface_index], ...]
 
 const DISSOLVE_SHADER := preload("res://shaders/dissolve.gdshader")
 static var _dissolve_noise: NoiseTexture2D = null
+static var _shard_noise: NoiseTexture2D = null
+
+## Seven death styles, picked at random per kill. They differ in shader mode,
+## edge colour, duration, hold-before-start, and what else fires alongside — so
+## no two feel like the same effect recoloured.
+##
+##   mode:  0 noise · 1 rise · 2 fall · 3 fade · 4 shards
+##   hold:  seconds of death animation before the effect begins
+##   fx:    extra one-shot to fire when it starts
+const DEATHS := [
+	{"name": "BURN", "mode": 0, "col": Color(1.00, 0.45, 0.12), "dur": 1.30,
+	 "hold": 1.50, "edge": 0.09, "energy": 5.0, "scale": 3.0, "coarse": false,
+	 "fx": "embers", "sink": 0.0, "shrink": 0.0},
+	{"name": "ASH", "mode": 1, "col": Color(1.00, 0.72, 0.30), "dur": 1.70,
+	 "hold": 1.20, "edge": 0.14, "energy": 3.2, "scale": 2.0, "coarse": false,
+	 "fx": "embers", "sink": 0.0, "shrink": 0.0},
+	{"name": "COLLAPSE", "mode": 2, "col": Color(0.85, 0.20, 0.10), "dur": 0.95,
+	 "hold": 0.90, "edge": 0.07, "energy": 6.5, "scale": 2.4, "coarse": false,
+	 "fx": "ring", "sink": 0.9, "shrink": 0.0},
+	{"name": "SHATTER", "mode": 4, "col": Color(0.70, 0.90, 1.00), "dur": 0.55,
+	 "hold": 0.55, "edge": 0.05, "energy": 9.0, "scale": 9.0, "coarse": true,
+	 "fx": "shards", "sink": 0.0, "shrink": 0.0},
+	{"name": "VAPOUR", "mode": 3, "col": Color(0.55, 1.00, 0.90), "dur": 2.10,
+	 "hold": 1.60, "edge": 0.20, "energy": 2.2, "scale": 2.0, "coarse": false,
+	 "fx": "rise", "sink": -1.4, "shrink": 0.0},
+	{"name": "IMPLODE", "mode": 0, "col": Color(0.75, 0.45, 1.00), "dur": 0.70,
+	 "hold": 0.70, "edge": 0.06, "energy": 8.0, "scale": 5.0, "coarse": false,
+	 "fx": "implode", "sink": 0.0, "shrink": 0.75},
+	{"name": "RUPTURE", "mode": 4, "col": Color(1.00, 0.25, 0.20), "dur": 0.42,
+	 "hold": 0.35, "edge": 0.04, "energy": 12.0, "scale": 6.0, "coarse": true,
+	 "fx": "rupture", "sink": 0.0, "shrink": 0.0},
+]
 var _accent := Color(0.35, 1.0, 0.75)
 var _body_col := Color(0.30, 0.13, 0.16)
 
@@ -269,8 +306,18 @@ func _physics_process(delta: float) -> void:
 	var wish := Vector3.ZERO
 	var step := _step()
 
+	if role == Role.WANDER:
+		_wander(delta)
+		return
 	if role != Role.FREE:
 		_scripted(delta, to_player, dist)
+		return
+
+	# The player is dead. Stop fighting entirely.
+	if player.get("alive") == false:
+		if not _discharged:
+			_discharge()
+		_wander(delta)
 		return
 
 	# While the player is pinned, everything else stops fighting and closes into
@@ -473,6 +520,52 @@ func _separate(delta: float) -> void:
 			global_position += d.normalized() * push * delta
 
 
+## One triumphant burst upward, then done with you.
+func _discharge() -> void:
+	_discharged = true
+	_release_token()
+	_combo_i = 0
+	role = Role.WANDER
+	velocity = Vector3.UP * 3.0
+	Sfx.play_at(&"roar", global_position + Vector3.UP * 1.6, -3.0)
+	Vfx.rise(global_position + Vector3.UP * (1.2 * scale.y), _accent, 22)
+	Vfx.shockwave(global_position, _accent, 1.8 + float(tier))
+
+
+## Aimless patrol. Picks a point, walks to it, picks another. No targeting, no
+## attacks — the fight is over and they know it.
+func _wander(delta: float) -> void:
+	_wander_t -= delta
+	if _wander_t <= 0.0 or global_position.distance_to(_wander_to) < 2.0:
+		var a := randf() * TAU
+		var r := 6.0 + randf() * 16.0
+		_wander_to = global_position + Vector3(sin(a) * r, 0.0, cos(a) * r)
+		_wander_t = 4.0 + randf() * 4.0
+
+	var to: Vector3 = _wander_to - global_position
+	to.y = 0.0
+	var wish := Vector3.ZERO
+	if to.length() > 1.0:
+		wish = to.normalized() * move_speed * 0.45
+
+	velocity.x = move_toward(velocity.x, wish.x, 8.0 * delta)
+	velocity.z = move_toward(velocity.z, wish.z, 8.0 * delta)
+	if not is_on_floor():
+		velocity.y -= 20.0 * delta
+	else:
+		velocity.y = maxf(velocity.y, 0.0)
+	move_and_slide()
+
+	if wish.length_squared() > 0.01:
+		_facing = lerp_angle(_facing, atan2(wish.x, wish.z), 1.0 - exp(-4.0 * delta))
+		visual.rotation.y = _facing
+
+	_separate(delta)
+	_travel(_loco_state())
+	anim_tree.set(_blend_path(), Vector2(velocity.x, velocity.z).length())
+	_apply_materials()
+
+
 ## Forms a ring at watching distance. No attacks, no tokens held.
 func _spectate(delta: float, to_player: Vector3, dist: float) -> void:
 	_release_token()
@@ -653,21 +746,54 @@ func _die() -> void:
 		Vfx.dust(global_position + Vector3.UP * 0.15, 10 * tier)
 		Vfx.shockwave(global_position, _accent, 2.0 + float(tier) * 1.6)
 
-	# Play the death animation, then burn away. Sinking through the floor was
-	# a placeholder; a dissolve reads as a body being unmade.
-	var mats := _to_dissolve()
+	# Play the death animation, then unmake the body. Which way it comes apart
+	# is rolled per kill, so a long fight never repeats the same exit.
+	var d: Dictionary = DEATHS[randi() % DEATHS.size()]
+	var mats := _to_dissolve(d)
+
 	var tw := create_tween()
-	tw.tween_interval(1.5)
+	tw.tween_interval(float(d["hold"]))
+	tw.tween_callback(func() -> void: _death_fx(d))
 	for m in mats:
 		tw.parallel().tween_method(
 			func(v: float) -> void: m.set_shader_parameter("dissolve", v),
-			0.0, 1.05, 1.3)
+			0.0, 1.05, float(d["dur"]))
+	if float(d["sink"]) != 0.0:
+		tw.parallel().tween_property(self, "position:y",
+			position.y - float(d["sink"]), float(d["dur"]))
+	if float(d["shrink"]) > 0.0:
+		tw.parallel().tween_property(self, "scale",
+			scale * (1.0 - float(d["shrink"])), float(d["dur"]))			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tw.chain().tween_callback(queue_free)
+
+
+## The one-shot that fires as a body starts coming apart. Each style gets its
+## own, so the particles agree with what the shader is doing.
+func _death_fx(d: Dictionary) -> void:
+	var at: Vector3 = global_position + Vector3.UP * (1.1 * scale.y)
+	var col: Color = d["col"]
+	match String(d["fx"]):
+		"embers":
+			Vfx.embers(at, col, 30)
+		"ring":
+			Vfx.shockwave(global_position, col, 2.4 + float(tier) * 1.4)
+			Vfx.embers(at, col, 18)
+		"shards":
+			Vfx.shards(at, col, 26)
+			Vfx.impact_flash(at, col, 1.4)
+		"rise":
+			Vfx.rise(at, col, 26)
+		"implode":
+			Vfx.implode(at, col)
+		"rupture":
+			Vfx.death_burst(at)
+			Vfx.shockwave(global_position, col, 3.4 + float(tier) * 1.6)
+			Vfx.impact_flash(at, col, 1.8)
 
 
 ## Swaps every surface to the dissolve shader, carrying its texture and colour
 ## across so the creature still looks like itself while it burns.
-func _to_dissolve() -> Array:
+func _to_dissolve(d: Dictionary) -> Array:
 	if _dissolve_noise == null:
 		var n := FastNoiseLite.new()
 		n.noise_type = FastNoiseLite.TYPE_SIMPLEX
@@ -679,6 +805,19 @@ func _to_dissolve() -> Array:
 		t.seamless = true
 		t.noise = n
 		_dissolve_noise = t
+	if _shard_noise == null:
+		# Low frequency, one octave: big blobs instead of grain, so SHATTER and
+		# RUPTURE come apart in chunks.
+		var n2 := FastNoiseLite.new()
+		n2.noise_type = FastNoiseLite.TYPE_CELLULAR
+		n2.frequency = 0.035
+		n2.fractal_octaves = 1
+		var t2 := NoiseTexture2D.new()
+		t2.width = 256
+		t2.height = 256
+		t2.seamless = true
+		t2.noise = n2
+		_shard_noise = t2
 
 	var out := []
 	for pair in _mesh_surfaces:
@@ -690,9 +829,17 @@ func _to_dissolve() -> Array:
 		if src:
 			sh.set_shader_parameter("albedo_tex", src.albedo_texture)
 			sh.set_shader_parameter("albedo_col", src.albedo_color)
-		sh.set_shader_parameter("noise_tex", _dissolve_noise)
-		sh.set_shader_parameter("edge_color", _accent)
+		sh.set_shader_parameter("noise_tex", _shard_noise if d["coarse"] else _dissolve_noise)
+		sh.set_shader_parameter("edge_color", d["col"])
+		sh.set_shader_parameter("edge_width", d["edge"])
+		sh.set_shader_parameter("edge_energy", d["energy"])
+		sh.set_shader_parameter("noise_scale", d["scale"])
+		sh.set_shader_parameter("mode", d["mode"])
 		sh.set_shader_parameter("dissolve", 0.0)
+		# Object-space bounds so a wipe travels this body, not the world.
+		var aabb := mi.get_aabb()
+		sh.set_shader_parameter("y_min", aabb.position.y)
+		sh.set_shader_parameter("y_max", aabb.position.y + aabb.size.y)
 		mi.set_surface_override_material(idx, sh)
 		out.append(sh)
 	# The live materials are gone now; stop the flash loop touching them.

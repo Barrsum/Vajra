@@ -476,9 +476,20 @@ func _resolve_swing() -> void:
 
 		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
 		var heavy: bool = float(def["damage"]) >= 40.0
+		# Base layer, always: a flare at the contact point plus spray.
 		Vfx.impact_flash(contact, Color(1.0, 0.86, 0.55), 1.0 if heavy else 0.65)
-		Vfx.sparks(contact, fwd + Vector3.UP * 0.4, heavy)
 		Vfx.ichor(contact, -fwd * 0.3 + Vector3.UP, heavy)
+		# Then one dressing at random, so a long combo never looks like one
+		# effect repeating.
+		match randi() % 3:
+			0:
+				Vfx.sparks(contact, fwd + Vector3.UP * 0.4, heavy)
+			1:
+				Vfx.slash_arc(contact, fwd, Color(1.0, 0.92, 0.72), 1.2 if heavy else 0.85)
+				Vfx.sparks(contact, fwd + Vector3.UP * 0.4, heavy)
+			2:
+				Vfx.burst_ring(contact, Color(1.0, 0.80, 0.45), 1.3 if heavy else 0.9)
+				Vfx.shard_spray(contact, fwd + Vector3.UP * 0.25, Color(1.0, 0.75, 0.35))
 		if heavy:
 			Vfx.shockwave(global_position, Color(1.0, 0.7, 0.3), 3.2)
 		Sfx.play_at(&"impact_heavy" if heavy else &"impact_light", contact)
@@ -497,6 +508,7 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	hit_stop(0.05)
 	Sfx.play_at(&"hurt", global_position + Vector3.UP)
 	hurt_flash.emit()
+	_hurt_vfx(_from)
 	# Taking a hit cancels your swing. Trading blows should never be free — this
 	# is what makes their attacks feel like an interruption rather than chip.
 	_attack_index = 0
@@ -534,6 +546,29 @@ func launch(dir: Vector3, force: float, lift: float) -> void:
 	Sfx.play_at(&"impact_heavy", global_position + Vector3.UP)
 	Vfx.dust(global_position + Vector3.UP * 0.2, 20)
 	_travel("hit")
+
+
+## Dressing for being hit. Three variants, rolled per hit, all keyed off the
+## direction the blow came from so the effect agrees with what struck you.
+func _hurt_vfx(from: Vector3) -> void:
+	var at: Vector3 = global_position + Vector3.UP * 1.15
+	var away: Vector3 = at - from
+	away.y = 0.0
+	if away.length_squared() < 0.01:
+		away = -_rotation_root.global_transform.basis.z
+	away = away.normalized()
+
+	const HURT := Color(1.0, 0.30, 0.26)
+	match randi() % 3:
+		0:
+			Vfx.impact_flash(at, HURT, 1.1)
+			Vfx.shard_spray(at, away + Vector3.UP * 0.5, HURT)
+		1:
+			Vfx.burst_ring(at, HURT, 1.4)
+			Vfx.sparks(at, away + Vector3.UP * 0.3, false)
+		2:
+			Vfx.slash_arc(at, away, HURT, 1.1)
+			Vfx.embers(at, HURT, 12)
 
 
 func is_launched() -> bool:

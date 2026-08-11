@@ -48,6 +48,7 @@ var _l3_giant_a := -1
 var _handover := false
 var _l4_warrok: Node = null
 var _l4_mediums: Array = []
+var _l4_surged := false
 var _l4_reinforced := {}   ## instance ids of mediums that already called help
 var _spawned_t0 := 0
 var _spawned_t1 := 0
@@ -371,6 +372,12 @@ func _check_long_night() -> void:
 			_spot_near(mini, 8.0 + randf() * 4.0)
 			Vfx.spawn_portal(mini.global_position, _portal_color(STALKER), 0.4)
 
+	# A last surge with the quota in sight, so the level does not trail off into
+	# an easy final stretch.
+	if not _l4_surged and Game.collected >= 29:
+		_l4_surged = true
+		_l4_surge()
+
 	if _beat_locked:
 		return
 
@@ -469,6 +476,22 @@ func _check_dust_shallows() -> void:
 		2:
 			if _alive <= 2:
 				_run_beat(3)
+
+
+## Two giants and two minis, all random species, once the quota is close.
+func _l4_surge() -> void:
+	ui.show_message("THEY KNOW YOU ARE LEAVING")
+	for i in 2:
+		var g := _prepare(JUGGERNAUT, 2, randi() % 4)
+		_place(g, 2)
+		_spot_near(g, 18.0 + randf() * 6.0)
+		Vfx.spawn_portal(g.global_position, Color(1.0, 0.42, 0.08), 2.2)
+	for i in 2:
+		var m := _prepare(STALKER, 0, randi() % 4)
+		m.drops = 0
+		_place(m, 0)
+		_spot_near(m, 11.0 + randf() * 4.0)
+		Vfx.spawn_portal(m.global_position, _portal_color(STALKER), 0.5)
 
 
 func _dead_count(list: Array) -> int:

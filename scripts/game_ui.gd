@@ -60,7 +60,9 @@ func _process(delta: float) -> void:
 		_hurt.modulate.a = _hurt_t * 0.55
 
 	if is_instance_valid(player) and "health" in player:
-		_health.text = "HP  %d / %d" % [roundi(player.health), roundi(player.max_health)]
+		# Numbers removed: the bar is the readout. Text next to a bar just
+		# splits attention between two versions of the same fact.
+		_health.visible = false
 		var frac: float = clampf(player.health / maxf(player.max_health, 0.001), 0.0, 1.0)
 		_fill.size.x = _bar.size.x * frac
 		# Same two-stage ramp as the enemy bars, so both read the same way.
@@ -93,8 +95,13 @@ func _bind_player() -> void:
 
 
 func _on_orbs(have: int, cap: int) -> void:
-	# Filled and empty pips, so the stock is countable at a glance.
-	_orbs.text = "ORBS  " + "*".repeat(have) + "-".repeat(maxi(cap - have, 0)) 		+ ("     H TO USE" if have > 0 else "")
+	# Health orbs only exist in the long night, so the counter only exists there.
+	# A permanently empty row of pips is noise in the other three worlds.
+	_orbs.visible = Game.world_index == 3
+	if not _orbs.visible:
+		return
+	# Pips alone. Placeholder until the icon set lands.
+	_orbs.text = "*".repeat(have)
 
 
 func _on_hurt() -> void:

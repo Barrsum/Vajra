@@ -476,8 +476,11 @@ func _resolve_swing() -> void:
 
 		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
 		var heavy: bool = float(def["damage"]) >= 40.0
+		Vfx.impact_flash(contact, Color(1.0, 0.86, 0.55), 1.0 if heavy else 0.65)
 		Vfx.sparks(contact, fwd + Vector3.UP * 0.4, heavy)
 		Vfx.ichor(contact, -fwd * 0.3 + Vector3.UP, heavy)
+		if heavy:
+			Vfx.shockwave(global_position, Color(1.0, 0.7, 0.3), 3.2)
 		Sfx.play_at(&"impact_heavy" if heavy else &"impact_light", contact)
 
 	if landed:

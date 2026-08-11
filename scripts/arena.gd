@@ -109,6 +109,10 @@ func _apply_mood() -> void:
 	env.adjustment_contrast = w.contrast
 	env.adjustment_saturation = w.saturation
 
+	# A drone tuned per world. Silence between fights makes a level feel like
+	# a test scene; this makes it feel like somewhere.
+	Sfx.start_bed(1.0 + float(Game.world_index) * 0.22, -24.0)
+
 	var sun := $Sun as DirectionalLight3D
 	sun.light_color = w.sun_color
 	sun.light_energy = w.sun_energy

@@ -145,6 +145,11 @@ var _mats: Array[StandardMaterial3D] = []
 ## Each material's own albedo, so the hit flash can return to it. Without
 ## this the flash would have to assume a flat colour and the texture is lost.
 var _base_cols: Array[Color] = []
+## Kept so the dissolve shader can inherit each surface's own texture.
+var _mesh_surfaces: Array = []   # [[MeshInstance3D, surface_index], ...]
+
+const DISSOLVE_SHADER := preload("res://shaders/dissolve.gdshader")
+static var _dissolve_noise: NoiseTexture2D = null
 var _accent := Color(0.35, 1.0, 0.75)
 var _body_col := Color(0.30, 0.13, 0.16)
 
@@ -231,6 +236,7 @@ func _collect_materials(n: Node) -> void:
 			mi.set_surface_override_material(s, m)
 			_mats.append(m)
 			_base_cols.append(m.albedo_color)
+			_mesh_surfaces.append([mi, s])
 	for c in n.get_children():
 		_collect_materials(c)
 
@@ -643,14 +649,55 @@ func _die() -> void:
 	_travel("death")
 	Sfx.play_at(&"death", global_position + Vector3.UP * 1.2)
 	Vfx.death_burst(global_position + Vector3.UP * 1.1)
-	# Only the heavy ones kick up ground dust, and far less than their arrival
-	# did — a small one dying should not be an event.
 	if tier >= 1:
 		Vfx.dust(global_position + Vector3.UP * 0.15, 10 * tier)
+		Vfx.shockwave(global_position, _accent, 2.0 + float(tier) * 1.6)
+
+	# Play the death animation, then burn away. Sinking through the floor was
+	# a placeholder; a dissolve reads as a body being unmade.
+	var mats := _to_dissolve()
 	var tw := create_tween()
-	tw.tween_interval(2.6)
-	tw.tween_property(self, "position:y", position.y - 2.2, 1.4)
-	tw.tween_callback(queue_free)
+	tw.tween_interval(1.5)
+	for m in mats:
+		tw.parallel().tween_method(
+			func(v: float) -> void: m.set_shader_parameter("dissolve", v),
+			0.0, 1.05, 1.3)
+	tw.chain().tween_callback(queue_free)
+
+
+## Swaps every surface to the dissolve shader, carrying its texture and colour
+## across so the creature still looks like itself while it burns.
+func _to_dissolve() -> Array:
+	if _dissolve_noise == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+		n.frequency = 0.09
+		n.fractal_octaves = 3
+		var t := NoiseTexture2D.new()
+		t.width = 256
+		t.height = 256
+		t.seamless = true
+		t.noise = n
+		_dissolve_noise = t
+
+	var out := []
+	for pair in _mesh_surfaces:
+		var mi: MeshInstance3D = pair[0]
+		var idx: int = pair[1]
+		var src: StandardMaterial3D = mi.get_surface_override_material(idx)
+		var sh := ShaderMaterial.new()
+		sh.shader = DISSOLVE_SHADER
+		if src:
+			sh.set_shader_parameter("albedo_tex", src.albedo_texture)
+			sh.set_shader_parameter("albedo_col", src.albedo_color)
+		sh.set_shader_parameter("noise_tex", _dissolve_noise)
+		sh.set_shader_parameter("edge_color", _accent)
+		sh.set_shader_parameter("dissolve", 0.0)
+		mi.set_surface_override_material(idx, sh)
+		out.append(sh)
+	# The live materials are gone now; stop the flash loop touching them.
+	_mats.clear()
+	return out
 
 
 func is_alive() -> bool:

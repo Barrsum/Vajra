@@ -187,6 +187,60 @@ func spawn_portal(pos: Vector3, color: Color, intensity := 1.0) -> void:
 	tw.chain().tween_callback(root.queue_free)
 
 
+## An expanding ground ring. Reads as force transmitted into the floor, which
+## is what a heavy landing or a big death should look like.
+func shockwave(pos: Vector3, color: Color, radius := 3.0) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.5)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.85
+	tm.outer_radius = 1.0
+	tm.rings = 24
+	ring.mesh = tm
+	ring.material_override = mat
+	add_child(ring)
+	ring.global_position = pos + Vector3.UP * 0.12
+	ring.scale = Vector3(0.2, 1.0, 0.2)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ring, "scale", Vector3(radius, 0.4, radius), 0.42)		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.42)
+	tw.chain().tween_callback(ring.queue_free)
+
+
+## A brief additive flare exactly where a hit connected. Small, bright, gone in
+## four frames — it marks the contact point the sparks spray away from.
+func impact_flash(pos: Vector3, color: Color, size := 1.0) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.9)
+	mat.albedo_texture = _dot_texture()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+
+	var q := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.6, 1.6) * size
+	q.mesh = qm
+	q.material_override = mat
+	add_child(q)
+	q.global_position = pos
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(q, "scale", Vector3.ONE * 1.9, 0.16)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.16)
+	tw.chain().tween_callback(q.queue_free)
+
+
 ## The arm blade materialising.
 func morph(pos: Vector3) -> void:
 	_emit(pos, 26, Vector3.UP, 140.0,

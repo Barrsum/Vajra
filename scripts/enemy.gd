@@ -68,6 +68,25 @@ const CREATURES := [
 	 "scale": 0.82, "color": Color(0.22, 0.15, 0.20)},
 ]
 
+## Animation pools, drawn from at spawn.
+##
+## Mutant and Pumpkinhulk keep the sets they were authored with — those two are
+## the creatures a player has already learned to read, and rerolling their body
+## language every wave would undo that. Skeleton and Warrok shipped with no
+## clips of their own, so each individual rolls its own set here.
+##
+## The draw is per category, never across: a walk only ever replaces a walk, an
+## attack an attack. That is what keeps a random set still looking like one
+## creature instead of three stitched together.
+const LOCO_POOL := ["locomotion", "locomotion_z", "locomotion_m3", "locomotion_m4"]
+const ATTACK_POOL := ["attack1", "attack2", "pk_attack1", "pk_attack2",
+	"attack_z", "attack_jump"]
+const TELEGRAPH_POOL := ["telegraph", "telegraph_flex"]
+## Reactions and deaths read the same on any body, so every creature rolls
+## these — including the Mutant and the Pumpkinhulk.
+const HIT_POOL := ["hit", "hit_l"]
+const DEATH_POOL := ["death", "death_z"]
+
 ## Size tiers, applied on top of the archetype.
 const TIERS := [
 	{"name": "", "scale": 1.0, "hp": 1.0, "dmg": 1.0, "speed": 1.0,
@@ -146,6 +165,14 @@ var _burst_t := 0.0
 var _burst_cd := 0.0
 var _sm: AnimationNodeStateMachinePlayback
 var _anim_state := ""
+## This individual's animation set, rolled once in _ready. Every _travel goes
+## through one of these rather than a literal state name.
+var _loco := "locomotion"
+var _atk1 := "attack1"
+var _atk2 := "attack2"
+var _tele := "telegraph"
+var _hit_anim := "hit"
+var _death_anim := "death"
 var _mats: Array[StandardMaterial3D] = []
 ## Each material's own albedo, so the hit flash can return to it. Without
 ## this the flash would have to assume a flat colour and the texture is lost.
@@ -231,6 +258,7 @@ func _ready() -> void:
 
 	anim_tree.active = true
 	_sm = anim_tree.get("parameters/playback")
+	_pick_anims()
 
 	var body: float = role_scale if role_scale > 0.0 else float(TIERS[tier]["scale"])
 	scale = Vector3.ONE * body * float(CREATURES[creature]["scale"])
@@ -739,7 +767,7 @@ func _die() -> void:
 	collision_layer = 0
 	collision_mask = 0
 	died.emit(self)
-	_travel("death")
+	_travel(_death_anim)
 	Sfx.play_at(&"death", global_position + Vector3.UP * 1.2)
 	Vfx.death_burst(global_position + Vector3.UP * 1.1)
 	if tier >= 1:
@@ -853,36 +881,57 @@ func is_alive() -> bool:
 
 # --- presentation -----------------------------------------------------------
 
+## Rolls this individual's animation set. Called once, before anything travels.
+func _pick_anims() -> void:
+	_hit_anim = HIT_POOL.pick_random()
+	_death_anim = DEATH_POOL.pick_random()
+	match creature:
+		0:  # Mutant — the authored set.
+			_loco = "locomotion"
+			_atk1 = "attack1"
+			_atk2 = "attack2"
+		1:  # Pumpkinhulk — its own walk and its own two attacks.
+			_loco = "locomotion_pk"
+			_atk1 = "pk_attack1"
+			_atk2 = "pk_attack2"
+		_:  # Skeleton and Warrok draw a set of their own.
+			_loco = LOCO_POOL.pick_random()
+			_tele = TELEGRAPH_POOL.pick_random()
+			# Shuffle rather than two draws: the combo alternates between these
+			# two, and drawing the same clip twice would flatten it back into a
+			# single repeated swing.
+			var pool := ATTACK_POOL.duplicate()
+			pool.shuffle()
+			_atk1 = pool[0]
+			_atk2 = pool[1]
+
+
 func _update_animation() -> void:
 	match state:
 		State.DEAD:
-			_travel("death")
+			_travel(_death_anim)
 		State.STAGGER:
-			_travel("hit")
+			_travel(_hit_anim)
 		State.TELEGRAPH:
-			_travel("telegraph")
+			_travel(_tele)
 		State.STRIKE, State.RECOVER, State.LINK:
 			# Alternate hands down the chain so a combo reads as a sequence.
 			_travel(_atk_state(_combo_i % 2 == 1))
 		_:
-			_travel(_loco_state())
+			_travel(_loco)
 			anim_tree.set(_blend_path(), Vector2(velocity.x, velocity.z).length())
 
 
-## Pumpkinhulks have their own walk and their own two attacks. Everything lives
-## in one state machine; only the entry name changes.
-func _loco_state() -> String:
-	return "locomotion_pk" if creature == 1 else "locomotion"
-
-
 func _atk_state(second: bool) -> String:
-	if creature == 1:
-		return "pk_attack2" if second else "pk_attack1"
-	return "attack2" if second else "attack1"
+	return _atk2 if second else _atk1
+
+
+func _loco_state() -> String:
+	return _loco
 
 
 func _blend_path() -> String:
-	return "parameters/%s/blend_position" % _loco_state()
+	return "parameters/%s/blend_position" % _loco
 
 
 func _travel(s: String) -> void:

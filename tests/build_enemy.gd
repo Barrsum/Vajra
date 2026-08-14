@@ -17,9 +17,11 @@ const TREE_OUT := "res://assets/enemy/enemy_tree.tres"
 
 # stem -> [clip, loop, speed]
 #
-# One coherent set. Mixing a zombie shamble with a mutant punch and a human idle
-# gave the creature three different body languages at once — which reads as
-# "wrong" long before you can point at any single clip.
+# One coherent set per creature. Mixing a zombie shamble with a mutant punch and
+# a human idle on the *same* body gave the creature three different body
+# languages at once — which reads as "wrong" long before you can point at any
+# single clip. So the clips are grouped into categories, and a creature draws a
+# whole set from within one category rather than one clip at a time.
 const MAP := {
 	"Mutant Breathing Idle": ["idle", true, 1.0],
 	"Mutant Walking": ["walk", true, 1.0],
@@ -41,16 +43,53 @@ const MAP := {
 	# Set-piece only: the limp and the swing that throws the player.
 	"Injured Walk": ["injured", true, 1.0],
 	"Baseball Hit": ["baseball", false, 1.0],
+
+	# --- variant pool -------------------------------------------------------
+	# Skeleton and Warrok shipped without animations of their own, so they roll
+	# a set from here at spawn. Speeds are tuned to land near the clip each one
+	# stands in for, because the combo windows come from the archetype table,
+	# not from clip length — an attack that plays at half the speed of its
+	# timing window looks like it whiffed.
+	# Zombie Walk is authored as a 4s shamble covering 1.3m — a 0.32 m/s stride.
+	# Left alone its blend point sits so low that a charging enemy is past it
+	# before the clip is ever visible, and the variant may as well not exist.
+	"Zombie Walk": ["walk_z", true, 2.2],
+	"Monster walk 3": ["walk_m3", true, 1.0],
+	"Monster walk 4": ["walk_m4", true, 1.0],
+	# Both raw clips run well over 2s. Damage lands on the archetype's strike
+	# window (~0.26s in), so a long clip is barely underway when the hit
+	# registers. Compressed to sit alongside the Mutant's 0.85s punch.
+	"Zombie Attack": ["attack_z", false, 2.0],
+	"Mutant Jump Attack": ["attack_jump", false, 2.5],
+	"Mutant Flexing Muscles": ["telegraph_flex", false, 4.2],
+	"Standing React Large From Left": ["hit_l", false, 1.5],
+	"Zombie Death": ["death_z", false, 1.35],
 }
 
+## One-shot states. Every one of these becomes a node in the state machine that
+## an enemy can travel to by name.
 const STATES := ["telegraph", "attack1", "attack2", "hit", "death",
-	"pk_attack1", "pk_attack2", "injured", "baseball"]
+	"pk_attack1", "pk_attack2", "injured", "baseball",
+	"attack_z", "attack_jump", "telegraph_flex", "hit_l", "death_z"]
+
+## Deaths are terminal — nothing transitions out of them.
+const TERMINAL := ["death", "death_z"]
+
+## Blend-space name -> the walk clip it is built around. Every locomotion space
+## shares the same idle and run; only the middle point changes, so a creature
+## that shambles still sprints when it has to.
+const LOCOS := {
+	"locomotion": "walk",
+	"locomotion_pk": "pk_walk",
+	"locomotion_z": "walk_z",
+	"locomotion_m3": "walk_m3",
+	"locomotion_m4": "walk_m4",
+}
 
 ## Blend points are measured from each clip's own root motion, so the stride
-## matches the speed it plays at.
-var walk_speed := 1.2
+## matches the speed it plays at. clip -> metres per second, as authored.
+var stride := {}
 var run_speed := 3.4
-var pk_walk_speed := 1.4
 
 
 func _ready() -> void:
@@ -78,11 +117,11 @@ func _ready() -> void:
 		anim.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
 		var drift := _strip_root_motion(anim)
 		if anim.length > 0.0 and drift > 0.05:
-			var authored := drift / anim.length
-			if clip == "walk":
-				walk_speed = authored
-			elif clip == "run":
-				run_speed = authored
+			# Measured before the time scale, then corrected by it — playing a
+			# clip faster covers the same ground in less time.
+			stride[clip] = (drift / anim.length) * speed
+			if clip == "run":
+				run_speed = stride[clip]
 		_time_scale(anim, speed)
 		_filter_tracks(anim, bones)
 
@@ -108,48 +147,56 @@ func _ready() -> void:
 
 	# --- state machine ---
 	var sm := AnimationNodeStateMachine.new()
-	var bs := AnimationNodeBlendSpace1D.new()
-	bs.min_space = 0.0
-	bs.max_space = maxf(run_speed, walk_speed + 0.5)
-	bs.add_blend_point(_clip("idle"), 0.0, -1, "idle")
-	bs.add_blend_point(_clip("walk"), maxf(walk_speed, 0.4), -1, "walk")
-	bs.add_blend_point(_clip("run"), maxf(run_speed, walk_speed + 0.5), -1, "run")
-	sm.add_node("locomotion", bs, Vector2(320, 40))
-	print("  blend space: idle@0.0  walk@%.2f  run@%.2f  (measured)" % [walk_speed, run_speed])
 
-	# Pumpkinhulks walk differently, so they get their own blend space rather
-	# than borrowing the Mutant's stride. Same tree, different entry point.
-	var bs2 := AnimationNodeBlendSpace1D.new()
-	bs2.min_space = 0.0
-	bs2.max_space = maxf(run_speed, pk_walk_speed + 0.5)
-	bs2.add_blend_point(_clip("idle"), 0.0, -1, "idle")
-	bs2.add_blend_point(_clip("pk_walk"), maxf(pk_walk_speed, 0.4), -1, "pk_walk")
-	bs2.add_blend_point(_clip("run"), maxf(run_speed, pk_walk_speed + 0.5), -1, "run")
-	sm.add_node("locomotion_pk", bs2, Vector2(320, 130))
-	print("  pumpkin blend: idle@0.0  pk_walk@%.2f  run@%.2f" % [pk_walk_speed, run_speed])
+	# One blend space per walk clip. Each is built around that clip's own
+	# measured stride, which is the whole reason feet do not slide: the walk
+	# point sits at exactly the speed the animator authored it for.
+	var by := 40
+	var locos: Array[String] = []
+	for loco in LOCOS:
+		var walk_clip: String = LOCOS[loco]
+		if not lib.has_animation(walk_clip):
+			print("  SKIP  %s (no %s)" % [loco, walk_clip])
+			continue
+		var w: float = maxf(float(stride.get(walk_clip, 1.2)), 0.4)
+		var top: float = maxf(run_speed, w + 0.5)
+		var bs := AnimationNodeBlendSpace1D.new()
+		bs.min_space = 0.0
+		bs.max_space = top
+		bs.add_blend_point(_clip("idle"), 0.0, -1, "idle")
+		bs.add_blend_point(_clip(walk_clip), w, -1, walk_clip)
+		bs.add_blend_point(_clip("run"), top, -1, "run")
+		sm.add_node(loco, bs, Vector2(320, by))
+		locos.append(loco)
+		by += 90
+		print("  %-14s idle@0.0  %-8s@%.2f  run@%.2f" % [loco, walk_clip, w, top])
 
 	var x := 60
-	var y := 220
+	var y := by + 60
+	var states: Array[String] = []
 	for s in STATES:
+		if not lib.has_animation(s):
+			print("  SKIP  state %s (clip missing)" % s)
+			continue
 		sm.add_node(s, _clip(s), Vector2(x, y))
+		states.append(s)
 		x += 220
 		if x > 900:
 			x = 60
 			y += 120
 
 	sm.add_transition("Start", "locomotion", _t(0.0))
-	var all := STATES.duplicate()
-	all.append("locomotion")
-	all.append("locomotion_pk")
+	var all: Array[String] = states.duplicate()
+	all.append_array(locos)
 	var n := 0
 	for from in all:
-		if from == "death":
+		if from in TERMINAL:
 			continue
 		for to in all:
 			if from != to:
 				sm.add_transition(from, to, _t(0.12))
 				n += 1
-	print("  transitions: %d" % n)
+	print("  %d states, %d transitions" % [all.size(), n])
 
 	var e2 := ResourceSaver.save(sm, TREE_OUT)
 	print("  tree    -> %s  %s" % [TREE_OUT, "ok" if e2 == OK else "FAILED"])

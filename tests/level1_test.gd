@@ -114,5 +114,9 @@ func _wait(frames: int) -> void:
 
 
 func _shot(name: String) -> void:
+	# frame_post_draw never fires under --headless, so an unguarded await here
+	# hangs the whole suite forever. Headless runs assert; windowed runs also shoot.
+	if DisplayServer.get_name() == "headless":
+		return
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(OUT + name + ".png")

@@ -1,4 +1,5 @@
 @echo off
-REM Launches the game directly, no editor. Fastest way to test.
+REM Launches VAJRA directly, no editor. Fastest way to play.
 cd /d "%~dp0"
-start "" "%~dp0..\pronto-expo\Godot_v4.7.1-stable_win64.exe" --path "%~dp0."
+call "%~dp0find_godot.bat" || exit /b 1
+start "" "%GODOT_EXE%" --path "%~dp0."

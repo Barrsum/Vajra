@@ -1,16 +1,33 @@
 # Godot's import cache and editor state. Regenerated on open; never commit.
 .godot/
 
+# The engine itself. PLAY.bat looks here first, so this is where you drop
+# Godot_v4.7.1-stable_win64.exe after cloning. ~120 MB, and everyone needs
+# their own platform's build anyway.
+/godot/
+
 # Export output
 /build/
 /export/
+# Safe to commit for a desktop-only project — see docs/EXPORTING.md. Ignored
+# by default because Android presets store keystore passwords in plain text.
 export_presets.cfg
 
 # Test artifacts
 shots/
 *.log
 
+# Godot writes saves to user://, which lives outside the project — but keep
+# this in case anything ever lands locally.
+*.translation
+
 # OS noise
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Editor noise
+.vscode/
+.idea/
+*.swp
+*~

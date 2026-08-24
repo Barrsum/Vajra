@@ -151,3 +151,21 @@ ui_release_mouse={
 
 anti_aliasing/quality/msaa_3d=2
 environment/defaults/default_clear_color=Color(0.06, 0.04, 0.03, 1)
+
+[shader_globals]
+
+; Weather, read by shaders/foliage.gdshader. Declared here because the shader
+; uses `global uniform`, which resolves against these by name — a missing one
+; is a shader error, not a default.
+WindDirection={
+"type": "vec3",
+"value": Vector3(1, 0, 0)
+}
+WindIntensity={
+"type": "float",
+"value": 0.35
+}
+GaleStrength={
+"type": "float",
+"value": 0.18
+}

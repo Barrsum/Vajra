@@ -7,6 +7,7 @@ extends Node3D
 ## this generator is scaffolding, not the destination.
 
 const WorldDefScript := preload("res://scripts/world_def.gd")
+const Foliage := preload("res://scripts/foliage.gd")
 const THEME_FOREST := 0
 const THEME_CAVE := 1
 const THEME_OCEAN := 2
@@ -187,6 +188,25 @@ func _spot(margin := 8.0, clear_centre := 10.0) -> Vector3:
 	return Vector3(_half * 0.5, 0, _half * 0.5)
 
 
+## Plants one foliage-shader tree. These are the Synty-style trees: a real
+## ArrayMesh with baked vertex colours, not the primitive blobs used for the
+## background woods. They are expensive enough per-vertex that a handful per
+## level is the point — they are set dressing you walk up to, not the forest.
+func _tree(pos: Vector3, height: float, canopy: float, mat: ShaderMaterial,
+		blobs := 3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = Foliage.build_tree(_rng, height, canopy, blobs)
+	mi.material_override = mat
+	# The wind deforms vertices on the GPU, so Godot's culling box has to be
+	# grown by hand or the whole tree pops out of view when its origin leaves
+	# the frustum but its swaying crown has not.
+	mi.extra_cull_margin = canopy * 2.0
+	add_child(mi)
+	mi.position = pos
+	mi.rotation.y = _rng.randf() * TAU
+	return mi
+
+
 func _ground(_theme: int) -> void:
 	_box(Vector3(_size, 1.0, _size), Vector3(0, -0.5, 0), _mat(_ground_color()))
 
@@ -229,6 +249,12 @@ func _forest() -> void:
 		_sphere(_rng.randf_range(2.0, 3.4), p + Vector3(0, th * 0.95, 0), leaf)
 		_sphere(_rng.randf_range(1.4, 2.4), p + Vector3(
 			_rng.randf_range(-1.2, 1.2), th * 1.25, _rng.randf_range(-1.2, 1.2)), leaf)
+
+	# One foliage-shader tree, deliberately larger than the background woods so
+	# it reads as a landmark rather than more scenery.
+	var canopy := Foliage.make_material(
+		Color(0.24, 0.52, 0.20), Color(0.26, 0.18, 0.12))
+	_tree(_spot(18.0, 22.0), 13.0, 5.2, canopy, 4)
 
 	# Bushes and rocks.
 	for i in 40:
@@ -279,6 +305,14 @@ func _cave() -> void:
 		_box(Vector3(_rng.randf_range(1.0, 3.0), _rng.randf_range(0.6, 1.6),
 			_rng.randf_range(1.0, 3.0)), p + Vector3(0, 0.5, 0), rock, false, _rng.randf() * TAU)
 
+	# Two trees clinging to the rock. Paler and sparser than the forest's —
+	# things growing at a cave mouth get less light.
+	var scrub := Foliage.make_material(
+		Color(0.30, 0.44, 0.26), Color(0.30, 0.26, 0.22))
+	for i in 2:
+		_tree(_spot(16.0, 20.0), _rng.randf_range(9.0, 12.0),
+			_rng.randf_range(3.4, 4.4), scrub, 3)
+
 
 func _ocean() -> void:
 	var wet := _mat(_ground_color().lightened(0.05), 0.55)
@@ -311,39 +345,119 @@ func _ocean() -> void:
 
 	_perimeter(9.0, 2.0, stone)
 
+	# Three dead trees on the dry seabed. Bleached leaves and a grey trunk —
+	# the same shader, saying something completely different.
+	var dead := Foliage.make_material(
+		Color(0.58, 0.52, 0.36), Color(0.44, 0.40, 0.35))
+	for i in 3:
+		_tree(_spot(15.0, 18.0), _rng.randf_range(8.0, 14.0),
+			_rng.randf_range(3.0, 5.0), dead, 3)
 
+
+## Level 4: a night garden.
+##
+## The shape is deliberately simple and readable in the dark: a square walking
+## path just inside the boundary, lamps standing along it, and everything you
+## fight over in the open middle. The path doubles as a legible edge — in a
+## dark level you want to know where the arena stops without walking into it.
 func _night() -> void:
-	var ruin := _mat(_prop_color(), 0.95)
 	var lamp_col := _accent_color()
-	var lamp := _mat(lamp_col, 0.4, 0.0, 3.0)
+	var lamp_mat := _mat(lamp_col, 0.4, 0.0, 3.0)
+	var post := _mat(Color(0.10, 0.10, 0.12))
 
-	_perimeter(14.0, 2.0, _mat(_ground_color().darkened(0.4)))
+	# A low hedge wall instead of the old 14m ruin. Waist-high keeps the arena
+	# closed without walling off the sky, which now has stars and a moon worth
+	# seeing.
+	_perimeter(2.6, 1.2, _mat(_ground_color().darkened(0.25)))
 
-	# Broken walls to break sightlines.
-	for i in 34:
-		var p := _spot(7.0, 11.0)
-		var h := _rng.randf_range(2.0, 7.0)
-		_box(Vector3(_rng.randf_range(3.0, 9.0), h, _rng.randf_range(0.6, 1.2)),
-			p + Vector3(0, h * 0.5, 0), ruin, true, _rng.randf() * TAU)
+	# --- the walking path ---------------------------------------------------
+	# A square ring of paving just inside the hedge. Built as four slabs; the
+	# corners overlap, which is invisible and much simpler than mitring them.
+	var pr := _half * 0.74          ## distance from centre to path centreline
+	var pw := 5.0                    ## path width
+	var paving := _mat(_prop_color().lightened(0.22), 0.85)
+	for sgn in [-1.0, 1.0]:
+		_box(Vector3(pr * 2.0 + pw, 0.12, pw), Vector3(0, 0.06, sgn * pr), paving, false)
+		_box(Vector3(pw, 0.12, pr * 2.0 + pw), Vector3(sgn * pr, 0.06, 0), paving, false)
 
-	# Rubble.
-	for i in 44:
-		var p := _spot(4.0, 6.0)
-		var s := _rng.randf_range(0.4, 1.6)
-		_box(Vector3(s, s * 0.7, s), p + Vector3(0, s * 0.35, 0), ruin, false, _rng.randf() * TAU)
+	# --- lamps along the path -----------------------------------------------
+	# Spaced around the ring rather than scattered, so the light itself draws
+	# the border. Same lamp as before: emissive head plus a real point light,
+	# because emission alone lights nothing.
+	var per_side := 5
+	for side in 4:
+		for i in per_side:
+			var t: float = -pr + (2.0 * pr) * (float(i) + 0.5) / float(per_side)
+			var p: Vector3
+			match side:
+				0: p = Vector3(t, 0, -pr - pw * 0.5)
+				1: p = Vector3(t, 0, pr + pw * 0.5)
+				2: p = Vector3(-pr - pw * 0.5, 0, t)
+				_: p = Vector3(pr + pw * 0.5, 0, t)
+			_cyl(0.16, 6.0, p + Vector3(0, 3.0, 0), post, false)
+			_sphere(0.5, p + Vector3(0, 6.2, 0), lamp_mat)
+			var pl := OmniLight3D.new()
+			pl.light_color = lamp_col
+			pl.light_energy = 5.5
+			pl.omni_range = 24.0
+			pl.shadow_enabled = false
+			add_child(pl)
+			pl.position = p + Vector3(0, 6.2, 0)
 
-	# The only light sources: emissive lamps with a small point light each. They
-	# are what make a dark level readable instead of merely dark.
-	for i in 10:
-		var p := _spot(10.0, 14.0)
-		_cyl(0.2, 7.0, p + Vector3(0, 3.5, 0), _mat(Color(0.1, 0.1, 0.12)), false)
-		_sphere(0.55, p + Vector3(0, 7.2, 0), lamp)
-		var pl := OmniLight3D.new()
-		pl.light_color = lamp_col
-		pl.light_energy = 6.0
-		pl.omni_range = 22.0
-		add_child(pl)
-		pl.position = p + Vector3(0, 7.2, 0)
+	# --- the garden itself --------------------------------------------------
+	# Trees scattered inside the ring, their leaves emissive. The canopies are
+	# the second light source in the level, so the fight is lit from above by
+	# the things you are fighting under.
+	var glow_leaf := Color(0.42, 0.95, 0.62)
+	var garden := Foliage.make_material(
+		glow_leaf, Color(0.18, 0.16, 0.20), 0.9, glow_leaf)
+	var inner: float = pr - pw
+	for i in 9:
+		var p := Vector3(
+			_rng.randf_range(-inner, inner), 0.0, _rng.randf_range(-inner, inner))
+		# Keep the middle clear — that is where waves land.
+		if Vector2(p.x, p.z).length() < 13.0:
+			continue
+		var h := _rng.randf_range(9.0, 15.0)
+		var canopy := _rng.randf_range(3.6, 5.6)
+		_tree(p, h, canopy, garden, 4)
+		# A dim light inside each canopy. The emission makes the leaves bright;
+		# only this makes them cast anything on the ground below.
+		var gl := OmniLight3D.new()
+		gl.light_color = glow_leaf
+		gl.light_energy = 2.2
+		gl.omni_range = canopy * 3.4
+		gl.shadow_enabled = false
+		add_child(gl)
+		gl.position = p + Vector3(0, h + canopy * 0.4, 0)
+
+	# Flower beds and low hedges, to make the ground read as tended.
+	var bed := _mat(_accent_color().darkened(0.25), 0.95)
+	for i in 26:
+		var p := _spot(8.0, 12.0)
+		if absf(p.x) > inner or absf(p.z) > inner:
+			continue
+		_box(Vector3(_rng.randf_range(2.0, 5.0), 0.5, _rng.randf_range(2.0, 5.0)),
+			p + Vector3(0, 0.25, 0), bed, false, _rng.randf() * TAU)
+
+	# A few benches on the path.
+	var bench := _mat(Color(0.24, 0.18, 0.13))
+	for i in 6:
+		var side := _rng.randi() % 4
+		var t := _rng.randf_range(-pr * 0.8, pr * 0.8)
+		var bp: Vector3
+		var yaw := 0.0
+		match side:
+			0: bp = Vector3(t, 0, -pr)
+			1: bp = Vector3(t, 0, pr)
+			2:
+				bp = Vector3(-pr, 0, t)
+				yaw = PI * 0.5
+			_:
+				bp = Vector3(pr, 0, t)
+				yaw = PI * 0.5
+		_box(Vector3(2.4, 0.18, 0.7), bp + Vector3(0, 0.65, 0), bench, false, yaw)
+		_box(Vector3(2.4, 0.6, 0.15), bp + Vector3(0, 1.0, 0), bench, false, yaw)
 
 
 func _street() -> void:

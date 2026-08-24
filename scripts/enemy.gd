@@ -295,9 +295,13 @@ func _collect_materials(n: Node) -> void:
 				m = StandardMaterial3D.new()
 				m.albedo_color = _body_col
 				m.roughness = 0.75
+			# Emission stays enabled for the hit flash and the telegraph, but
+			# rests at zero. It used to idle at 0.05 of the archetype colour,
+			# which put a constant coloured wash over every creature — that is
+			# what made them read as tinted silhouettes instead of lit models.
 			m.emission_enabled = true
 			m.emission = _accent
-			m.emission_energy_multiplier = 0.05
+			m.emission_energy_multiplier = 0.0
 			mi.set_surface_override_material(s, m)
 			_mats.append(m)
 			_base_cols.append(m.albedo_color)
@@ -948,7 +952,9 @@ func _apply_materials() -> void:
 		if _feinting:
 			tele *= 0.6   # a feint glows less, so it can be told apart if you look
 	var charged := role == Role.CHARGE or role == Role.HOLD
-	var e := 0.05 + _flash * 2.2 + tele * 1.6 + (1.2 if _burst_t > 0.0 else 0.0) 		+ (0.9 + sin(_role_t * 9.0) * 0.35 if charged else 0.0)
+	# Rests at zero: no glow unless something is actually happening. Lighting
+	# does the rest of the work.
+	var e := _flash * 2.2 + tele * 1.6 + (1.2 if _burst_t > 0.0 else 0.0) 		+ (0.9 + sin(_role_t * 9.0) * 0.35 if charged else 0.0)
 	var col := _accent.lerp(Color(1.0, 0.15, 0.05), tele)
 	if _burst_t > 0.0:
 		col = Color(1.0, 0.9, 0.7)

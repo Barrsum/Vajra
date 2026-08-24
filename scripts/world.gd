@@ -8,6 +8,7 @@ extends Node3D
 
 const WorldDefScript := preload("res://scripts/world_def.gd")
 const Foliage := preload("res://scripts/foliage.gd")
+const CampfireScript := preload("res://scripts/campfire.gd")
 const THEME_FOREST := 0
 const THEME_CAVE := 1
 const THEME_OCEAN := 2
@@ -356,91 +357,128 @@ func _ocean() -> void:
 
 ## Level 4: a night garden.
 ##
-## The shape is deliberately simple and readable in the dark: a square walking
-## path just inside the boundary, lamps standing along it, and everything you
-## fight over in the open middle. The path doubles as a legible edge — in a
-## dark level you want to know where the arena stops without walking into it.
+## Readable in the dark is the whole brief. A square walking path just inside
+## the boundary with lamps along it draws the edge; a second, shorter ring of
+## lamps and a scatter of campfires light the middle, which is where the fight
+## actually happens and which the first pass left far too dark.
 func _night() -> void:
 	var lamp_col := _accent_color()
 	var lamp_mat := _mat(lamp_col, 0.4, 0.0, 3.0)
 	var post := _mat(Color(0.10, 0.10, 0.12))
 
-	# A low hedge wall instead of the old 14m ruin. Waist-high keeps the arena
-	# closed without walling off the sky, which now has stars and a moon worth
-	# seeing.
+	# A low hedge rather than a wall, so the sky stays visible.
 	_perimeter(2.6, 1.2, _mat(_ground_color().darkened(0.25)))
 
 	# --- the walking path ---------------------------------------------------
-	# A square ring of paving just inside the hedge. Built as four slabs; the
-	# corners overlap, which is invisible and much simpler than mitring them.
-	var pr := _half * 0.74          ## distance from centre to path centreline
+	var pr := _half * 0.74          ## centre to path centreline
 	var pw := 5.0                    ## path width
 	var paving := _mat(_prop_color().lightened(0.22), 0.85)
 	for sgn in [-1.0, 1.0]:
 		_box(Vector3(pr * 2.0 + pw, 0.12, pw), Vector3(0, 0.06, sgn * pr), paving, false)
 		_box(Vector3(pw, 0.12, pr * 2.0 + pw), Vector3(sgn * pr, 0.06, 0), paving, false)
 
-	# --- lamps along the path -----------------------------------------------
-	# Spaced around the ring rather than scattered, so the light itself draws
-	# the border. Same lamp as before: emissive head plus a real point light,
-	# because emission alone lights nothing.
-	var per_side := 5
-	for side in 4:
-		for i in per_side:
-			var t: float = -pr + (2.0 * pr) * (float(i) + 0.5) / float(per_side)
-			var p: Vector3
-			match side:
-				0: p = Vector3(t, 0, -pr - pw * 0.5)
-				1: p = Vector3(t, 0, pr + pw * 0.5)
-				2: p = Vector3(-pr - pw * 0.5, 0, t)
-				_: p = Vector3(pr + pw * 0.5, 0, t)
-			_cyl(0.16, 6.0, p + Vector3(0, 3.0, 0), post, false)
-			_sphere(0.5, p + Vector3(0, 6.2, 0), lamp_mat)
-			var pl := OmniLight3D.new()
-			pl.light_color = lamp_col
-			pl.light_energy = 5.5
-			pl.omni_range = 24.0
-			pl.shadow_enabled = false
-			add_child(pl)
-			pl.position = p + Vector3(0, 6.2, 0)
+	# --- lamps --------------------------------------------------------------
+	# Two rings. The outer one on the path draws the border; the inner one is
+	# purely to stop the middle of the arena being a black hole.
+	_lamp_ring(pr + pw * 0.5, 7, 6.0, 6.5, 26.0, lamp_col, lamp_mat, post)
+	_lamp_ring(_half * 0.34, 4, 5.0, 5.0, 24.0, lamp_col, lamp_mat, post)
 
-	# --- the garden itself --------------------------------------------------
-	# Trees scattered inside the ring, their leaves emissive. The canopies are
-	# the second light source in the level, so the fight is lit from above by
-	# the things you are fighting under.
+	# --- campfires ----------------------------------------------------------
+	# Four big volumetric fires between the two lamp rings. Each carries its own
+	# barrier, so they are obstacles you fight around — no damage, no trigger,
+	# just somewhere neither you nor anything else can stand.
+	var fire_r := _half * 0.52
+	for i in 4:
+		var a := TAU * (float(i) + 0.5) / 4.0
+		var f: Node3D = CampfireScript.new()
+		f.barrier_radius = 3.0
+		f.flame_height = 3.2
+		f.flame_width = 2.6
+		f.volumetric = true
+		f.light_energy = 9.0
+		add_child(f)
+		f.position = Vector3(cos(a), 0, sin(a)) * fire_r
+
+	# Small braziers on the path corners, on the cheap flame shader.
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var b: Node3D = CampfireScript.new()
+			b.barrier_radius = 1.1
+			b.flame_height = 1.9
+			b.flame_width = 1.0
+			b.volumetric = false
+			b.light_energy = 4.0
+			b.light_color = Color(1.0, 0.70, 0.34)
+			add_child(b)
+			b.position = Vector3(sx * pr, 0.55, sz * pr)
+			# A stone plinth under each, so they are not floating flames.
+			_cyl(0.7, 1.1, Vector3(sx * pr, 0.55, sz * pr), post, false)
+
+	# --- trees --------------------------------------------------------------
+	# A proper stand of them now. Kept out of the middle and off the path.
 	var glow_leaf := Color(0.42, 0.95, 0.62)
 	var garden := Foliage.make_material(
-		glow_leaf, Color(0.18, 0.16, 0.20), 0.9, glow_leaf)
-	var inner: float = pr - pw
-	for i in 9:
+		glow_leaf, Color(0.18, 0.16, 0.20), 0.32, glow_leaf)
+	var placed := 0
+	var tries := 0
+	while placed < 22 and tries < 400:
+		tries += 1
 		var p := Vector3(
-			_rng.randf_range(-inner, inner), 0.0, _rng.randf_range(-inner, inner))
-		# Keep the middle clear — that is where waves land.
-		if Vector2(p.x, p.z).length() < 13.0:
+			_rng.randf_range(-pr + pw, pr - pw), 0.0,
+			_rng.randf_range(-pr + pw, pr - pw))
+		if Vector2(p.x, p.z).length() < 15.0:
 			continue
-		var h := _rng.randf_range(9.0, 15.0)
-		var canopy := _rng.randf_range(3.6, 5.6)
+		# Not on top of a campfire.
+		var clash := false
+		for i in 4:
+			var a := TAU * (float(i) + 0.5) / 4.0
+			if p.distance_to(Vector3(cos(a), 0, sin(a)) * fire_r) < 8.0:
+				clash = true
+				break
+		if clash:
+			continue
+		placed += 1
+		var h := _rng.randf_range(8.0, 15.0)
+		var canopy := _rng.randf_range(3.2, 5.4)
 		_tree(p, h, canopy, garden, 4)
-		# A dim light inside each canopy. The emission makes the leaves bright;
-		# only this makes them cast anything on the ground below.
-		var gl := OmniLight3D.new()
-		gl.light_color = glow_leaf
-		gl.light_energy = 2.2
-		gl.omni_range = canopy * 3.4
-		gl.shadow_enabled = false
-		add_child(gl)
-		gl.position = p + Vector3(0, h + canopy * 0.4, 0)
+		# Only every third canopy gets a light. Twenty-two omni lights in one
+		# scene is a real cost, and the emission carries the look on its own.
+		if placed % 3 == 0:
+			var gl := OmniLight3D.new()
+			gl.light_color = glow_leaf
+			gl.light_energy = 2.6
+			gl.omni_range = canopy * 3.6
+			gl.shadow_enabled = false
+			add_child(gl)
+			gl.position = p + Vector3(0, h + canopy * 0.4, 0)
 
-	# Flower beds and low hedges, to make the ground read as tended.
-	var bed := _mat(_accent_color().darkened(0.25), 0.95)
+	# --- glowing things -----------------------------------------------------
+	# Cheap emissive props, no lights attached. They read as glow because the
+	# scene has bloom, and they give the dark ground something in it.
+	var pods := [
+		Color(0.45, 1.00, 0.70), Color(0.55, 0.80, 1.00),
+		Color(1.00, 0.72, 0.35), Color(0.85, 0.55, 1.00),
+	]
+	for i in 60:
+		var p := _spot(5.0, 8.0)
+		if absf(p.x) > pr - pw or absf(p.z) > pr - pw:
+			continue
+		var c: Color = pods[_rng.randi() % pods.size()]
+		var m := _mat(c, 0.35, 0.0, _rng.randf_range(2.0, 5.0))
+		_sphere(_rng.randf_range(0.16, 0.42), p + Vector3(0, _rng.randf_range(0.2, 1.1), 0), m)
+
+	# Glowing flower beds.
+	var bed_cols := [Color(0.30, 0.85, 0.55), Color(0.45, 0.60, 1.00)]
 	for i in 26:
 		var p := _spot(8.0, 12.0)
-		if absf(p.x) > inner or absf(p.z) > inner:
+		if absf(p.x) > pr - pw or absf(p.z) > pr - pw:
 			continue
+		var c: Color = bed_cols[_rng.randi() % bed_cols.size()]
 		_box(Vector3(_rng.randf_range(2.0, 5.0), 0.5, _rng.randf_range(2.0, 5.0)),
-			p + Vector3(0, 0.25, 0), bed, false, _rng.randf() * TAU)
+			p + Vector3(0, 0.25, 0), _mat(c.darkened(0.35), 0.9, 0.0, 0.9),
+			false, _rng.randf() * TAU)
 
-	# A few benches on the path.
+	# Benches on the path.
 	var bench := _mat(Color(0.24, 0.18, 0.13))
 	for i in 6:
 		var side := _rng.randi() % 4
@@ -458,6 +496,31 @@ func _night() -> void:
 				yaw = PI * 0.5
 		_box(Vector3(2.4, 0.18, 0.7), bp + Vector3(0, 0.65, 0), bench, false, yaw)
 		_box(Vector3(2.4, 0.6, 0.15), bp + Vector3(0, 1.0, 0), bench, false, yaw)
+
+
+## One square ring of lamps. `per_side` on each edge, so the light traces the
+## shape rather than dotting it randomly.
+func _lamp_ring(radius: float, per_side: int, height: float, energy: float,
+		omni_range: float, col: Color, head: StandardMaterial3D,
+		post: StandardMaterial3D) -> void:
+	for side in 4:
+		for i in per_side:
+			var t: float = -radius + (2.0 * radius) * (float(i) + 0.5) / float(per_side)
+			var p: Vector3
+			match side:
+				0: p = Vector3(t, 0, -radius)
+				1: p = Vector3(t, 0, radius)
+				2: p = Vector3(-radius, 0, t)
+				_: p = Vector3(radius, 0, t)
+			_cyl(0.16, height, p + Vector3(0, height * 0.5, 0), post, false)
+			_sphere(0.5, p + Vector3(0, height + 0.2, 0), head)
+			var pl := OmniLight3D.new()
+			pl.light_color = col
+			pl.light_energy = energy
+			pl.omni_range = omni_range
+			pl.shadow_enabled = false
+			add_child(pl)
+			pl.position = p + Vector3(0, height + 0.2, 0)
 
 
 func _street() -> void:

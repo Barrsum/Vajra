@@ -125,6 +125,11 @@ var _step_accum := 0.0
 
 ## Damage and knockback multiplier for the current world, read once on spawn.
 var power := 1.0
+## Set by a lightning strike in level 4. Multiplies the NEXT landed attack and
+## then clears — a charge, not a buff, so it cannot stack into something silly
+## while you stand around waiting for the storm.
+var charge := 0.0
+var _charge_fx: Node3D = null
 
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
@@ -471,7 +476,7 @@ func _resolve_swing() -> void:
 			continue
 
 		_swing_hit.append(e)
-		e.take_damage(float(def["damage"]) * power, global_position, float(def["knock"]) * power)
+		e.take_damage(float(def["damage"]) * power * (1.0 + charge), global_position, float(def["knock"]) * power)
 		landed = true
 
 		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
@@ -497,6 +502,74 @@ func _resolve_swing() -> void:
 	if landed:
 		hit_stop(float(def["stop"]) * minf(power, 1.6))
 		add_trauma(float(def["shake"]) * minf(power, 1.5))
+		if charge > 0.0:
+			# Spend it here, not when the swing starts — a whiffed punch keeps
+			# the charge, which is what makes it feel like a reward rather than
+			# a timer you can waste by pressing the button.
+			var contact := global_position + Vector3.UP * 1.3
+			Vfx.burst_ring(contact, Color(0.62, 0.78, 1.0), 1.8)
+			Vfx.shockwave(global_position, Color(0.55, 0.72, 1.0), 4.0)
+			Vfx.sparks(contact, fwd + Vector3.UP * 0.5, true)
+			add_trauma(0.5)
+			_clear_charge()
+
+
+## Called by the storm when lightning finds the player. Does not stack: a
+## second strike before you land a hit refreshes rather than doubles.
+func charge_next_hit(amount: float) -> void:
+	if not alive:
+		return
+	charge = amount
+	if _charge_fx == null:
+		_charge_fx = _build_charge_fx()
+	_charge_fx.visible = true
+
+
+func _clear_charge() -> void:
+	charge = 0.0
+	if _charge_fx != null:
+		_charge_fx.visible = false
+
+
+## A ring of arcs around the blade arm. Parented to the model so it tracks the
+## animation without any per-frame work here.
+func _build_charge_fx() -> Node3D:
+	var root := Node3D.new()
+	var host: Node = get_node_or_null("Rotation/Model/Armature/Skeleton3D")
+	if host == null:
+		host = self
+	host.add_child(root)
+	root.position = Vector3(0, 1.2, 0)
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.55, 0.75, 1.0, 0.75)
+	mat.emission_enabled = true
+	mat.emission = Color(0.6, 0.8, 1.0)
+	mat.emission_energy_multiplier = 6.0
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+
+	for i in 5:
+		var mi := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.05, 0.34)
+		mi.mesh = qm
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mi)
+		var a := TAU * float(i) / 5.0
+		mi.position = Vector3(cos(a) * 0.42, randf_range(-0.25, 0.45), sin(a) * 0.42)
+
+	var gl := OmniLight3D.new()
+	gl.light_color = Color(0.6, 0.78, 1.0)
+	gl.light_energy = 2.4
+	gl.omni_range = 5.0
+	gl.shadow_enabled = false
+	root.add_child(gl)
+
+	root.visible = false
+	return root
 
 
 func take_damage(amount: float, _from: Vector3) -> void:

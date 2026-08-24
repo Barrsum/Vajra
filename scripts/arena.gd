@@ -11,6 +11,7 @@ extends Node3D
 const EnemyScript := preload("res://scripts/enemy.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
 const SkySetup := preload("res://scripts/sky_setup.gd")
+const StormScript := preload("res://scripts/storm.gd")
 
 # Archetype ids, matching Enemy.ARCHETYPES.
 const HUSK := 0
@@ -62,6 +63,11 @@ func _ready() -> void:
 	_apply_mood()
 	var w: Resource = Game.current_world()
 	_scripted = w != null and w.scripted
+	if w != null and w.storm_on:
+		# Level 4 only. The storm needs the player to know who to charge.
+		var storm: Node3D = StormScript.new()
+		storm.player = player
+		add_child(storm)
 	if _scripted:
 		_run_beat(0)
 	else:

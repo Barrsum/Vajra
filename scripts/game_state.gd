@@ -255,6 +255,7 @@ func _build_default_worlds() -> void:
 	night.clouds_scale = 1.2
 	night.clouds_tint = Color(0.72, 0.76, 0.92)
 	night.stars_speed = 0.6
+	night.storm_on = true
 
 	night.glow_intensity = 0.95
 	night.ground_color = Color(0.15, 0.15, 0.19)

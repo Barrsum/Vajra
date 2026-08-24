@@ -61,6 +61,10 @@ class_name WorldDef
 ## Ground haze. Height is where it starts thinning out.
 @export var fog_height := 8.0
 @export var fog_height_density := 0.06
+## Random lightning. Strikes cost creatures 10% of max health and charge the
+## player's next hit instead of hurting them, so it reads as the world helping.
+@export var storm_on := false
+
 @export_group("Sky")
 ## The stylised sky shader. Time of day is not a separate setting: it falls out
 ## of where `sun_angles` puts the key light. Point the sun below the horizon and

@@ -70,6 +70,13 @@ light_energy = 2.2
 shadow_enabled = true
 directional_shadow_max_distance = 80.0
 
+[node name="Moon" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.94, 0.24, -0.25, 0, 0.72, 0.69, 0.34, 0.65, -0.68, 0, 30, 0)
+light_color = Color(0.62, 0.7, 1, 1)
+light_energy = 0.0
+shadow_enabled = false
+directional_shadow_max_distance = 80.0
+
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("4_world")
 

@@ -10,6 +10,7 @@ extends Node3D
 
 const EnemyScript := preload("res://scripts/enemy.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
+const SkySetup := preload("res://scripts/sky_setup.gd")
 
 # Archetype ids, matching Enemy.ARCHETYPES.
 const HUSK := 0
@@ -80,12 +81,15 @@ func _apply_mood() -> void:
 		return
 
 	var env: Environment = ($WorldEnvironment as WorldEnvironment).environment
-	var sky_mat := env.sky.sky_material as ProceduralSkyMaterial
-	if sky_mat:
-		sky_mat.sky_top_color = w.sky_top
-		sky_mat.sky_horizon_color = w.sky_horizon
-		sky_mat.ground_horizon_color = w.ground_horizon
-		sky_mat.ground_bottom_color = w.ground_horizon.darkened(0.4)
+	if w.sky_shader_on:
+		_apply_sky(env, w)
+	else:
+		var sky_mat := env.sky.sky_material as ProceduralSkyMaterial
+		if sky_mat:
+			sky_mat.sky_top_color = w.sky_top
+			sky_mat.sky_horizon_color = w.sky_horizon
+			sky_mat.ground_horizon_color = w.ground_horizon
+			sky_mat.ground_bottom_color = w.ground_horizon.darkened(0.4)
 
 	# Fog and haze are off while clarity matters more than atmosphere. The
 	# per-world values are still here and still applied, so flipping fog_on
@@ -119,6 +123,54 @@ func _apply_mood() -> void:
 	sun.rotation = Vector3(
 		deg_to_rad(w.sun_angles.x), deg_to_rad(w.sun_angles.y), deg_to_rad(w.sun_angles.z))
 
+	# The moon is the sky shader's second light. It exists in every world, even
+	# daylight ones, because the shader keys off whether LIGHT1 is enabled — so
+	# a daytime moon is parked below the horizon at zero energy rather than
+	# removed. It also becomes the key light once the sun drops.
+	var moon := get_node_or_null("Moon") as DirectionalLight3D
+	if moon:
+		moon.light_color = w.moon_light_color
+		moon.light_energy = w.moon_energy
+		moon.shadow_enabled = w.moon_energy > 0.15
+		moon.rotation = Vector3(
+			deg_to_rad(w.moon_angles.x), deg_to_rad(w.moon_angles.y), deg_to_rad(w.moon_angles.z))
+
+
+
+## Pushes one world into the sky shader.
+##
+## Note what is NOT here: any notion of time of day. The shader derives sunrise,
+## noon, sunset and night entirely from where LIGHT0 points, so setting
+## `sun_angles` is setting the time — and the ground lighting and the sky can
+## never disagree about where the sun is.
+func _apply_sky(env: Environment, w: Resource) -> void:
+	var m := SkySetup.ensure_material(env)
+	if m == null:
+		return
+	m.set_shader_parameter("day_top_color", w.day_top)
+	m.set_shader_parameter("day_bottom_color", w.day_bottom)
+	m.set_shader_parameter("sunset_top_color", w.sunset_top)
+	m.set_shader_parameter("sunset_bottom_color", w.sunset_bottom)
+	m.set_shader_parameter("night_top_color", w.night_top)
+	m.set_shader_parameter("night_bottom_color", w.night_bottom)
+	m.set_shader_parameter("horizon_color", w.horizon_tint)
+	m.set_shader_parameter("horizon_blur", w.horizon_blur)
+	m.set_shader_parameter("sun_color", w.sun_disc_color)
+	m.set_shader_parameter("sun_sunset_color", w.sun_disc_sunset_color)
+	m.set_shader_parameter("sun_size", w.sun_disc_size)
+	m.set_shader_parameter("moon_color", w.moon_disc_color)
+	m.set_shader_parameter("moon_size", w.moon_disc_size)
+	m.set_shader_parameter("clouds_cutoff", w.clouds_cutoff)
+	m.set_shader_parameter("clouds_weight", w.clouds_weight)
+	m.set_shader_parameter("clouds_speed", w.clouds_speed)
+	m.set_shader_parameter("clouds_scale", w.clouds_scale)
+	m.set_shader_parameter("clouds_fuzziness", w.clouds_fuzziness)
+	m.set_shader_parameter("clouds_top_color", w.clouds_tint)
+	m.set_shader_parameter("clouds_middle_color", w.clouds_tint.darkened(0.08))
+	m.set_shader_parameter("clouds_bottom_color", w.clouds_tint.darkened(0.17))
+	m.set_shader_parameter("clouds_edge_color", w.clouds_tint.darkened(0.2))
+	m.set_shader_parameter("stars_speed", w.stars_speed)
+	m.set_shader_parameter("stars_texture", SkySetup.stars_texture())
 
 # --- scripted level ---------------------------------------------------------
 #

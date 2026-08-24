@@ -75,6 +75,22 @@ func _build_default_worlds() -> void:
 	forest.sun_energy = 1.5
 	forest.sun_angles = Vector3(-58.0, 28.0, 0.0)
 	forest.ambient_energy = 1.1
+	# Late morning over the canopy. Sun high, sky pushed green so it agrees with
+	# the forest below, and enough cloud to give the light something to break on.
+	forest.day_top = Color(0.30, 0.55, 0.78)
+	forest.day_bottom = Color(0.62, 0.80, 0.72)
+	forest.sunset_top = Color(0.62, 0.70, 0.85)
+	forest.sunset_bottom = Color(0.95, 0.66, 0.52)
+	forest.horizon_tint = Color(0.55, 0.72, 0.55)
+	forest.sun_disc_color = Color(9.0, 8.6, 4.0)
+	forest.sun_disc_size = 0.16
+	forest.clouds_cutoff = 0.36
+	forest.clouds_speed = 1.4
+	forest.clouds_scale = 1.1
+	forest.clouds_tint = Color(1.0, 1.0, 0.97)
+	forest.moon_angles = Vector3(38.0, 200.0, 0.0)
+	forest.moon_energy = 0.0
+
 	forest.glow_intensity = 0.30
 	forest.ground_color = Color(0.20, 0.30, 0.16)
 	forest.prop_color = Color(0.34, 0.33, 0.26)
@@ -108,6 +124,24 @@ func _build_default_worlds() -> void:
 	cave.sun_energy = 1.5
 	cave.sun_angles = Vector3(-72.0, 10.0, 0.0)
 	cave.ambient_energy = 0.8
+	# The brief asked for pure sky at the cave mouth: noon, deep blue overhead,
+	# and heavy bright cloud so stepping out of the dark actually hurts.
+	cave.day_top = Color(0.10, 0.42, 0.88)
+	cave.day_bottom = Color(0.55, 0.80, 1.00)
+	cave.sunset_top = Color(0.70, 0.75, 1.00)
+	cave.sunset_bottom = Color(1.00, 0.60, 0.62)
+	cave.horizon_tint = Color(0.72, 0.85, 0.95)
+	cave.horizon_blur = 0.07
+	cave.sun_disc_color = Color(12.0, 11.0, 7.0)
+	cave.sun_disc_size = 0.13
+	cave.clouds_cutoff = 0.26
+	cave.clouds_speed = 2.6
+	cave.clouds_scale = 0.85
+	cave.clouds_fuzziness = 0.42
+	cave.clouds_tint = Color(1.0, 1.0, 1.0)
+	cave.moon_angles = Vector3(42.0, 200.0, 0.0)
+	cave.moon_energy = 0.0
+
 	cave.glow_intensity = 0.35
 	cave.ground_color = Color(0.24, 0.25, 0.27)
 	cave.prop_color = Color(0.22, 0.22, 0.23)
@@ -142,6 +176,27 @@ func _build_default_worlds() -> void:
 	ocean.sun_energy = 1.45
 	ocean.sun_angles = Vector3(-38.0, 55.0, 0.0)
 	ocean.ambient_energy = 0.9
+	# A low sun over a dried sea. Dropping it to 20 degrees puts the shader into
+	# a partial sunset on its own and rakes long shadows across the flat, which
+	# is most of what sells the emptiness.
+	ocean.sun_angles = Vector3(-20.0, 55.0, 0.0)
+	ocean.day_top = Color(0.45, 0.55, 0.70)
+	ocean.day_bottom = Color(0.82, 0.78, 0.66)
+	ocean.sunset_top = Color(0.72, 0.62, 0.72)
+	ocean.sunset_bottom = Color(1.00, 0.62, 0.42)
+	ocean.horizon_tint = Color(0.88, 0.76, 0.58)
+	ocean.horizon_blur = 0.10
+	ocean.sun_disc_color = Color(11.0, 6.5, 2.4)
+	ocean.sun_disc_sunset_color = Color(11.0, 3.2, 0.6)
+	ocean.sun_disc_size = 0.24
+	ocean.clouds_cutoff = 0.44
+	ocean.clouds_weight = 0.12
+	ocean.clouds_speed = 1.0
+	ocean.clouds_scale = 1.5
+	ocean.clouds_tint = Color(1.0, 0.92, 0.82)
+	ocean.moon_angles = Vector3(36.0, 200.0, 0.0)
+	ocean.moon_energy = 0.0
+
 	ocean.glow_intensity = 0.50
 	ocean.ground_color = Color(0.40, 0.38, 0.33)
 	ocean.prop_color = Color(0.38, 0.37, 0.34)
@@ -177,6 +232,30 @@ func _build_default_worlds() -> void:
 	night.sun_energy = 0.55
 	night.sun_angles = Vector3(-30.0, 200.0, 0.0)
 	night.ambient_energy = 0.85
+	# Night is not a colour setting — it is the sun below the horizon. A positive
+	# X angle puts it there, and the shader takes over: sky to night colours,
+	# stars up, moon lit. The sun keeps no energy, so the moon is the key light
+	# and shadows fall from above where they should, not up from underground.
+	night.sun_angles = Vector3(16.0, 200.0, 0.0)
+	night.sun_energy = 0.0
+	night.night_top = Color(0.02, 0.03, 0.09)
+	night.night_bottom = Color(0.08, 0.09, 0.20)
+	night.sunset_top = Color(0.24, 0.20, 0.42)
+	night.sunset_bottom = Color(0.55, 0.28, 0.34)
+	night.horizon_tint = Color(0.10, 0.12, 0.24)
+	night.horizon_blur = 0.09
+	night.moon_angles = Vector3(-46.0, 20.0, 0.0)
+	night.moon_energy = 0.75
+	night.moon_light_color = Color(0.58, 0.68, 1.00)
+	night.moon_disc_color = Color(0.92, 0.94, 1.00)
+	night.moon_disc_size = 0.11
+	night.clouds_cutoff = 0.52
+	night.clouds_weight = 0.35
+	night.clouds_speed = 0.8
+	night.clouds_scale = 1.2
+	night.clouds_tint = Color(0.72, 0.76, 0.92)
+	night.stars_speed = 0.6
+
 	night.glow_intensity = 0.95
 	night.ground_color = Color(0.15, 0.15, 0.19)
 	night.prop_color = Color(0.24, 0.24, 0.29)

@@ -8,8 +8,7 @@ extends CanvasLayer
 @onready var _quota: Label = %Quota
 @onready var _health: Label = %Health
 @onready var _bar: Control = %HealthBar
-@onready var _fill: ColorRect = %Fill
-@onready var _orbs: Label = %Orbs
+@onready var _orbs: Control = %Orbs
 @onready var _hurt: TextureRect = %Hurt
 @onready var _banner: Label = %Banner
 
@@ -60,13 +59,10 @@ func _process(delta: float) -> void:
 		_hurt.modulate.a = _hurt_t * 0.55
 
 	if is_instance_valid(player) and "health" in player:
-		# Numbers removed: the bar is the readout. Text next to a bar just
-		# splits attention between two versions of the same fact.
+		# The bar owns its own colour ramp, trailing damage and numbers now —
+		# this just hands it the two values.
 		_health.visible = false
-		var frac: float = clampf(player.health / maxf(player.max_health, 0.001), 0.0, 1.0)
-		_fill.size.x = _bar.size.x * frac
-		# Same two-stage ramp as the enemy bars, so both read the same way.
-		_fill.color = Color(0.96, 0.84, 0.20).lerp(Color(0.35, 0.85, 0.40), (frac - 0.5) * 2.0) 			if frac > 0.5 else Color(0.94, 0.20, 0.16).lerp(Color(0.96, 0.84, 0.20), frac * 2.0)
+		_bar.set_health(player.health, player.max_health)
 		if "alive" in player and not player.alive and Game.state == Game.State.PLAYING:
 			Game.player_died()
 
@@ -100,8 +96,7 @@ func _on_orbs(have: int, cap: int) -> void:
 	_orbs.visible = Game.world_index == 3
 	if not _orbs.visible:
 		return
-	# Pips alone. Placeholder until the icon set lands.
-	_orbs.text = "*".repeat(have)
+	_orbs.set_orbs(have, cap)
 
 
 func _on_hurt() -> void:

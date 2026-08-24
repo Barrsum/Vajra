@@ -116,6 +116,10 @@ func _ready() -> void:
 			is_equal_approx(before - e.health, maxhp * 0.10))
 
 	if DisplayServer.get_name() != "headless":
+		# Stock the rack so the screenshot shows both full and spent flasks.
+		if hero:
+			for i in 3:
+				hero.add_health_orb()
 		await _wait(30)
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(OUT + "garden.png")

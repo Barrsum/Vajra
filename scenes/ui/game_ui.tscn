@@ -1,7 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/game_ui.gd" id="1_ui"]
 [ext_resource type="Script" path="res://scripts/enemy_bars.gd" id="2_bars"]
+[ext_resource type="Script" path="res://scripts/ui_health_bar.gd" id="2_hb"]
+[ext_resource type="Script" path="res://scripts/ui_orbs.gd" id="3_orb"]
 
 [node name="GameUI" type="CanvasLayer"]
 script = ExtResource("1_ui")
@@ -60,31 +62,15 @@ text = "SCRAP MEAT   0 / 10"
 
 [node name="HealthBar" type="Control" parent="Hud/TopLeft"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 18)
+custom_minimum_size = Vector2(460, 34)
 layout_mode = 2
+script = ExtResource("2_hb")
 
-[node name="Track" type="ColorRect" parent="Hud/TopLeft/HealthBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0.08, 0.07, 0.08, 0.85)
-
-[node name="Fill" type="ColorRect" parent="Hud/TopLeft/HealthBar"]
+[node name="Orbs" type="Control" parent="Hud/TopLeft"]
 unique_name_in_owner = true
-layout_mode = 0
-offset_right = 300.0
-offset_bottom = 18.0
-color = Color(0.35, 0.85, 0.4, 1)
-
-[node name="Orbs" type="Label" parent="Hud/TopLeft"]
-unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 68)
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.34, 0.34, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 17
-text = "ORBS"
+script = ExtResource("3_orb")
 
 [node name="Health" type="Label" parent="Hud/TopLeft"]
 unique_name_in_owner = true

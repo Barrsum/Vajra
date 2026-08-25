@@ -164,19 +164,25 @@ func _layout() -> void:
 			# error where you wrote it; the script simply fails to parse.
 			var path := String(path_v)
 			var prop_name := path.get_file().get_basename()
-			# 8m is a middling tree: tall enough to read as scenery, short
-			# enough that a wrong guess is obvious rather than absurd.
-			var h := 8.0
-			var node := Props.spawn_path(path, h)
+			# Start from whatever was decided last time. First visit falls
+			# back to 8m — a middling tree: tall enough to read as scenery,
+			# short enough that a wrong guess is obvious rather than absurd.
+			var cfg := Props.settings(path)
+			var h := float(cfg["height"])
+			var off := float(cfg["offset"])
+			var node := Props.spawn_path(path, h, null, off)
 			if node == null:
 				continue
 			add_child(node)
-			node.position = Vector3(x, 0, 0)
+			# Y comes from spawn_path, which has already grounded it and
+			# applied the saved nudge. Overwriting it here would undo both.
+			node.position = Vector3(x, node.position.y, 0)
 			var label := _tag("%s  ·  %s" % [prop_name, cat],
 				Vector3(x, 0.0, 0), Color(1, 1, 1))
 			_items.append({
 				"node": node, "name": prop_name, "category": cat,
-				"height": h, "label": label, "path": path, "x": x,
+				"height": h, "offset": off, "label": label,
+				"path": path, "x": x, "saved": Props.has_settings(path),
 			})
 			x += SPACING
 
@@ -224,8 +230,9 @@ func _ui() -> void:
 
 func _refresh_hud() -> void:
 	var lines := [
-		"PROP LAB     WASD + mouse to fly, SHIFT faster, ALT free cursor",
-		"TAB next prop   [ ] resize   R random spin   P print for world.gd",
+		"PROP LAB    WASD fly · Q/E down/up · SHIFT faster · ALT cursor · ESC quit",
+		"TAB next prop   [ ] height   ; ' sink/lift   R respin",
+		"ENTER save this prop        P print for world.gd",
 		"",
 	]
 	if _items.is_empty():
@@ -237,6 +244,15 @@ func _refresh_hud() -> void:
 			_sel + 1, _items.size(), it["name"], it["category"]])
 		lines.append("height  %.1f m        %s" % [
 			it["height"], _describe(float(it["height"]))])
+		var off := float(it["offset"])
+		var sunk := "level with the ground"
+		if off > 0.001:
+			sunk = "lifted %.2f m" % (off * float(it["height"]))
+		elif off < -0.001:
+			sunk = "sunk %.2f m" % (-off * float(it["height"]))
+		lines.append("ground  %+.3f          %s" % [off, sunk])
+		lines.append("        %s" % ("SAVED" if it["saved"] else
+			"unsaved — press ENTER to keep this size"))
 	_hud.text = "\n".join(lines)
 
 
@@ -278,6 +294,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_resize(-1)
 			KEY_BRACKETRIGHT:
 				_resize(1)
+			KEY_SEMICOLON:
+				_nudge(-1)
+			KEY_APOSTROPHE:
+				_nudge(1)
+			KEY_ENTER, KEY_KP_ENTER:
+				_save()
 			KEY_R:
 				if not _items.is_empty():
 					_items[_sel]["node"].rotation.y = randf() * TAU
@@ -328,14 +350,51 @@ func _resize(dir: int) -> void:
 	h = clampf(h + step * float(dir), 0.25, 80.0)
 	it["height"] = h
 
+	_rebuild(it, spin_of(it))
+	_focus()
+	_refresh_hud()
+
+
+## Sink or lift the prop relative to the ground, as a fraction of its height —
+## so a nudge decided at 8m still looks the same when the prop is placed at 16.
+func _nudge(dir: int) -> void:
+	if _items.is_empty():
+		return
+	var it: Dictionary = _items[_sel]
+	it["offset"] = clampf(float(it["offset"]) + 0.01 * float(dir), -0.5, 0.5)
+	_rebuild(it, spin_of(it))
+	_refresh_hud()
+
+
+func spin_of(it: Dictionary) -> float:
+	var n: Node3D = it["node"]
+	return n.rotation.y if is_instance_valid(n) else 0.0
+
+
+func _rebuild(it: Dictionary, spin: float) -> void:
 	var old: Node3D = it["node"]
-	var spin: float = old.rotation.y
-	old.queue_free()
-	var node := Props.spawn_path(String(it["path"]), h)
+	if is_instance_valid(old):
+		old.queue_free()
+	var node := Props.spawn_path(String(it["path"]), float(it["height"]),
+		null, float(it["offset"]))
 	add_child(node)
-	node.position = Vector3(float(it["x"]), 0, 0)
+	node.position = Vector3(float(it["x"]), node.position.y, 0)
 	node.rotation.y = spin
 	it["node"] = node
+	# Marked unsaved the moment it changes, so the HUD never claims a number
+	# is stored when it is not.
+	it["saved"] = false
+
+
+func _save() -> void:
+	if _items.is_empty():
+		return
+	var it: Dictionary = _items[_sel]
+	Props.save_settings(String(it["path"]), float(it["height"]),
+		float(it["offset"]))
+	it["saved"] = true
+	print("saved  %s  height %.1f m  offset %+.3f"
+		% [it["name"], it["height"], it["offset"]])
 	_refresh_hud()
 
 

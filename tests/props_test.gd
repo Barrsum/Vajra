@@ -19,15 +19,23 @@ func _ready() -> void:
 	_check("an empty category returns null, not an error",
 		Props.spawn("definitely_not_a_category", 5.0) == null)
 
-	if not Props.has_any("forest"):
-		print("  (no forest props generated yet — scaling checks skipped)")
+	# Whichever category actually has assets. Pinning this to "forest" meant
+	# the real checks silently stopped running the moment that folder emptied.
+	var cat := ""
+	for c in ["forest", "cave", "dust", "night"]:
+		if Props.has_any(c):
+			cat = c
+			break
+	if cat == "":
+		print("  (nothing generated yet — scaling checks skipped)")
 		_done()
 		return
+	print("  testing against '%s'" % cat)
 
 	# The whole reason the registry exists: TRELLIS hands back everything at
 	# roughly one metre, so a prop that is not rescaled is useless.
 	for want in [3.0, 8.0, 14.0]:
-		var p := Props.spawn("forest", want)
+		var p := Props.spawn(cat, want)
 		add_child(p)
 		await get_tree().process_frame
 		var box := _bounds(p)
@@ -37,7 +45,37 @@ func _ready() -> void:
 			absf(box.position.y) < 0.05)
 		p.queue_free()
 
-	var solid := Props.spawn_solid("forest", 7.0)
+	# The saved-settings round trip, and the ground nudge it stores.
+	var path: String = Props.list(cat)[0]
+	var before := Props.settings(path)
+	Props.save_settings(path, 11.5, -0.08)
+	var after := Props.settings(path)
+	_check("settings persist (%.1fm, %+.3f)" % [after["height"], after["offset"]],
+		is_equal_approx(after["height"], 11.5)
+		and is_equal_approx(after["offset"], -0.08))
+
+	var sunk := Props.spawn_path(path, 10.0, null, -0.10)
+	add_child(sunk)
+	await get_tree().process_frame
+	var sb := _bounds(sunk)
+	# A -0.10 nudge on a 10m prop sinks it one metre, and must scale with the
+	# prop rather than being a fixed distance.
+	_check("a -0.10 nudge sinks a 10m prop by 1m (base %.2f)" % sb.position.y,
+		absf(sb.position.y + 1.0) < 0.05)
+	sunk.queue_free()
+
+	var deep := Props.spawn_path(path, 20.0, null, -0.10)
+	add_child(deep)
+	await get_tree().process_frame
+	var db := _bounds(deep)
+	_check("the same nudge sinks a 20m prop by 2m (base %.2f)" % db.position.y,
+		absf(db.position.y + 2.0) < 0.08)
+	deep.queue_free()
+
+	# Put it back, so running the suite does not rewrite the artist's numbers.
+	Props.save_settings(path, float(before["height"]), float(before["offset"]))
+
+	var solid := Props.spawn_solid(cat, 7.0)
 	add_child(solid)
 	await get_tree().process_frame
 	var body: StaticBody3D = null

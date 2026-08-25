@@ -19,6 +19,8 @@ const DIR := "res://assets/props/"
 ## A plain ConfigFile rather than a Resource so it can be read in a diff and
 ## edited by hand when that is faster than opening the lab.
 const SETTINGS := "res://assets/props/props.cfg"
+## Physics layer 4. Scenery the player bumps into and creatures ignore.
+const SCENERY_LAYER := 8
 
 ## category -> Array[String] of resource paths. Built once per run.
 static var _cache := {}
@@ -169,6 +171,20 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	col.shape = shape
 	body.add_child(col)
 	col.position = Vector3(0, height * 0.5, 0)
+
+	# LAYER 4: scenery. Blocks the PLAYER and nothing else.
+	#
+	# Creatures mask layers 1 and 3 (world and each other), so they walk
+	# straight through decoration. That is deliberate. Putting props on the
+	# world layer meant every enemy collided with every tree, and the level 4
+	# grab set-piece stopped resolving — the smasher crossing the arena got
+	# caught on scenery and the throw never happened.
+	#
+	# The trade is a creature occasionally clipping a rock, against enemies
+	# getting stuck on decoration for the rest of the game. In a level meant to
+	# be densely dressed that is not a close call.
+	body.collision_layer = SCENERY_LAYER
+	body.collision_mask = 0
 	node.add_child(body)
 	return node
 

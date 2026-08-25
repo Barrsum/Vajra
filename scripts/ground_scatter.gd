@@ -30,9 +30,13 @@ const Props := preload("res://scripts/props.gd")
 ## `density` is patches per 100 square metres. Cover is roughly
 ## density * (patch_size / spacing)^2, and overlapping is the point: below
 ## about 1.6x coverage the gaps start showing.
+## `avoid` is a list of Vector3(x, z, radius) keep-out circles — campfires,
+## spawn points, anywhere a prop standing in the way would be a gameplay
+## problem rather than a decoration.
 static func scatter(parent: Node3D, category: String, radius: float,
 		patch_size := 9.0, density := 1.4, rng: RandomNumberGenerator = null,
-		sink := 0.06, inner := 0.0) -> Node3D:
+		sink := 0.06, inner := 0.0, avoid: Array = [],
+		square := false) -> Node3D:
 	var paths := Props.list(category)
 	if paths.is_empty():
 		return null
@@ -44,7 +48,7 @@ static func scatter(parent: Node3D, category: String, radius: float,
 	root.name = "GroundScatter"
 	parent.add_child(root)
 
-	var area := PI * radius * radius
+	var area: float = (radius * radius * 4.0) if square else (PI * radius * radius)
 	var total := int(area / 100.0 * density)
 	if total <= 0:
 		return root
@@ -67,11 +71,31 @@ static func scatter(parent: Node3D, category: String, radius: float,
 		tries += 1
 		# Uniform over the disc: sqrt on the radius, or everything piles into
 		# the middle.
-		var a := rng.randf() * TAU
-		var r: float = sqrt(rng.randf()) * radius
-		if r < inner:
+		var at: Vector2
+		if square:
+			# Arenas are square. Scattering a disc into one leaves the corners
+			# bare, which is very visible from the middle.
+			at = Vector2(rng.randf_range(-radius, radius),
+				rng.randf_range(-radius, radius))
+			if at.length() < inner:
+				continue
+		else:
+			# Uniform over the disc: sqrt on the radius, or everything piles
+			# into the middle.
+			var a := rng.randf() * TAU
+			var r: float = sqrt(rng.randf()) * radius
+			if r < inner:
+				continue
+			at = Vector2(cos(a) * r, sin(a) * r)
+
+		var blocked := false
+		for zone in avoid:
+			var z: Vector3 = zone
+			if at.distance_to(Vector2(z.x, z.y)) < z.z:
+				blocked = true
+				break
+		if blocked:
 			continue
-		var at := Vector2(cos(a) * r, sin(a) * r)
 
 		var clash := false
 		for q in placed:

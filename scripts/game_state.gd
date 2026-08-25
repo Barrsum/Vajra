@@ -273,8 +273,14 @@ func _build_default_worlds() -> void:
 	night.storm_on = true
 
 	night.glow_intensity = 0.95
-	night.ground_color = Color(0.15, 0.15, 0.19)
-	night.prop_color = Color(0.24, 0.24, 0.29)
+	# Snow, not mud. The generated set for this world is a winter one, and the
+	# base ground shows through everywhere the scattered patches do not reach —
+	# so it has to already be the right colour rather than something the
+	# patches are expected to hide. Blue-grey rather than white: lit by
+	# lamplight it reads as snow, and pure white would blow out under the
+	# campfires.
+	night.ground_color = Color(0.66, 0.71, 0.80)
+	night.prop_color = Color(0.34, 0.36, 0.42)
 	night.accent_color = Color(1.0, 0.62, 0.28)
 	night.arena_size = 115.0
 	worlds.append(night)

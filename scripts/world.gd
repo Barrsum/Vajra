@@ -9,6 +9,8 @@ extends Node3D
 const WorldDefScript := preload("res://scripts/world_def.gd")
 const Foliage := preload("res://scripts/foliage.gd")
 const CampfireScript := preload("res://scripts/campfire.gd")
+const Props := preload("res://scripts/props.gd")
+const Scatter := preload("res://scripts/ground_scatter.gd")
 const THEME_FOREST := 0
 const THEME_CAVE := 1
 const THEME_OCEAN := 2
@@ -26,6 +28,8 @@ var _rng := RandomNumberGenerator.new()
 var _def: Resource = null
 var _size := 120.0
 var _half := 60.0
+## Kept so generated trees can replace them when the night set exists.
+var _procedural_trees: Array = []
 
 
 func _set_regenerate(v: bool) -> void:
@@ -363,6 +367,11 @@ func _ocean() -> void:
 ## actually happens and which the first pass left far too dark.
 func _night() -> void:
 	var lamp_col := _accent_color()
+	if Props.has_any("night_ground"):
+		# A winter set needs cold lamps. Orange lamplight over pale ground
+		# reads as sand, and it also puts the level's warm light everywhere,
+		# which leaves the campfires with nothing to contrast against.
+		lamp_col = Color(0.72, 0.84, 1.00)
 	var lamp_mat := _mat(lamp_col, 0.4, 0.0, 3.0)
 	var post := _mat(Color(0.10, 0.10, 0.12))
 
@@ -440,7 +449,7 @@ func _night() -> void:
 		placed += 1
 		var h := _rng.randf_range(8.0, 15.0)
 		var canopy := _rng.randf_range(3.2, 5.4)
-		_tree(p, h, canopy, garden, 4)
+		_procedural_trees.append(_tree(p, h, canopy, garden, 4))
 		# Only every third canopy gets a light. Twenty-two omni lights in one
 		# scene is a real cost, and the emission carries the look on its own.
 		if placed % 3 == 0:
@@ -467,9 +476,11 @@ func _night() -> void:
 		var m := _mat(c, 0.35, 0.0, _rng.randf_range(2.0, 5.0))
 		_sphere(_rng.randf_range(0.16, 0.42), p + Vector3(0, _rng.randf_range(0.2, 1.1), 0), m)
 
-	# Glowing flower beds.
+	# Glowing flower beds — skipped once a generated ground set exists. Bright
+	# green slabs lying on snow read as untextured placeholder geometry, which
+	# is exactly what they are.
 	var bed_cols := [Color(0.30, 0.85, 0.55), Color(0.45, 0.60, 1.00)]
-	for i in 26:
+	for i in (0 if Props.has_any("night_ground") else 26):
 		var p := _spot(8.0, 12.0)
 		if absf(p.x) > pr - pw or absf(p.z) > pr - pw:
 			continue
@@ -496,6 +507,122 @@ func _night() -> void:
 				yaw = PI * 0.5
 		_box(Vector3(2.4, 0.18, 0.7), bp + Vector3(0, 0.65, 0), bench, false, yaw)
 		_box(Vector3(2.4, 0.6, 0.15), bp + Vector3(0, 1.0, 0), bench, false, yaw)
+
+	# Generated assets last, so they can be told where everything else went.
+	# VAJRA_NO_DRESS=1 builds the level without any generated assets. Kept
+	# because it is the fastest way to tell an art problem from a logic one —
+	# it is how the level 4 set-piece regression was pinned to scenery
+	# collision in one run rather than by bisecting the dressing code.
+	if not OS.has_environment("VAJRA_NO_DRESS"):
+		_dress_night(pr, pw, fire_r)
+
+
+## Lays the generated snow set over the built level.
+##
+## Order matters, and it is the order a real place is built in: ground first,
+## everything else standing on it. Ground goes everywhere including under the
+## props; rocks and trees keep out of the arena centre and off the fires;
+## bushes fill what is left.
+##
+## Every step degrades to nothing when its category is empty, so the level
+## still builds before any assets exist for it.
+func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
+	# Nothing may spawn on a campfire — each carries a barrier, so a tree
+	# inside one is a tree the player can see and never reach.
+	var keep_out: Array = []
+	for i in 4:
+		var a := TAU * (float(i) + 0.5) / 4.0
+		keep_out.append(Vector3(cos(a) * fire_r, sin(a) * fire_r, 7.0))
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			keep_out.append(Vector3(sx * path_r, sz * path_r, 4.0))
+
+	# --- ground ------------------------------------------------------------
+	# Square, because the arena is: a disc of patches leaves the corners bare
+	# and that is very visible from the middle. Sunk slightly so the rims bed
+	# into the floor rather than standing on it.
+	#
+	# 16m patches rather than more small ones is a triangle-budget decision.
+	# A patch costs ~19k triangles whatever size it is drawn at, so covering
+	# the arena with big ones costs a fraction of covering it with small ones,
+	# and at ground level nobody reads the difference.
+	if Props.has_any("night_ground"):
+		var g := Scatter.scatter(self, "night_ground", _half * 0.98,
+			16.0, 0.95, _rng, 0.10, 0.0, [], true)
+		if g != null:
+			g.name = "SnowGround"
+
+	# --- big rocks ---------------------------------------------------------
+	# Placed, not scattered. There are only a handful and each is a landmark
+	# you navigate by, so they want spreading deliberately rather than
+	# clustering wherever the random happened to land. Solid, so they are cover.
+	if Props.has_any("night_rock"):
+		var rocks := 7
+		for i in rocks:
+			var a := TAU * float(i) / float(rocks) + _rng.randf_range(-0.3, 0.3)
+			var r: float = _rng.randf_range(_half * 0.30, _half * 0.62)
+			var at := Vector3(cos(a) * r, 0, sin(a) * r)
+			if _blocked(at, keep_out):
+				continue
+			var h := _rng.randf_range(3.0, 6.5)
+			var rock := Props.spawn_solid("night_rock", h, h * 0.34, _rng)
+			if rock == null:
+				continue
+			add_child(rock)
+			rock.position = Vector3(at.x, rock.position.y, at.z)
+			keep_out.append(Vector3(at.x, at.z, h * 0.8))
+
+	# --- trees -------------------------------------------------------------
+	# Replaces the procedural canopies rather than joining them. Mixing the two
+	# looks worse than either alone — a low-poly blob beside a photoscanned
+	# conifer reads as a bug, not as variety.
+	if Props.has_any("night"):
+		for old in _procedural_trees:
+			if is_instance_valid(old):
+				old.queue_free()
+		_procedural_trees.clear()
+
+		var placed := 0
+		var tries := 0
+		while placed < 26 and tries < 600:
+			tries += 1
+			var p := Vector3(
+				_rng.randf_range(-path_r + path_w, path_r - path_w), 0,
+				_rng.randf_range(-path_r + path_w, path_r - path_w))
+			# The middle is where the fight happens. Trees there are cover the
+			# player did not ask for and the camera has to see through.
+			if Vector2(p.x, p.z).length() < 17.0:
+				continue
+			if _blocked(p, keep_out):
+				continue
+			# Wide height spread. One tree species repeated is a forest; one
+			# tree SIZE repeated is wallpaper.
+			var h := _rng.randf_range(7.0, 17.0)
+			var t := Props.spawn_solid("night", h, h * 0.045, _rng)
+			if t == null:
+				continue
+			add_child(t)
+			t.position = Vector3(p.x, t.position.y, p.z)
+			keep_out.append(Vector3(p.x, p.z, 5.0))
+			placed += 1
+
+	# --- bushes ------------------------------------------------------------
+	# Scattered rather than placed, and deliberately NOT solid: they are ankle
+	# height, and a player caught on invisible shrubbery mid-dodge is a bug
+	# report every time.
+	if Props.has_any("night_bush"):
+		var b := Scatter.scatter(self, "night_bush", _half * 0.90,
+			2.2, 0.34, _rng, 0.12, 14.0, keep_out, true)
+		if b != null:
+			b.name = "SnowBushes"
+
+
+func _blocked(at: Vector3, zones: Array) -> bool:
+	for z in zones:
+		var v: Vector3 = z
+		if Vector2(at.x, at.z).distance_to(Vector2(v.x, v.y)) < v.z:
+			return true
+	return false
 
 
 ## One square ring of lamps. `per_side` on each edge, so the light traces the

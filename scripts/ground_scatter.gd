@@ -33,10 +33,14 @@ const Props := preload("res://scripts/props.gd")
 ## `avoid` is a list of Vector3(x, z, radius) keep-out circles — campfires,
 ## spawn points, anywhere a prop standing in the way would be a gameplay
 ## problem rather than a decoration.
+## `solid` gives every patch exact trimesh collision on the scenery layer, so
+## the small rocks moulded into a ground patch are things you step over rather
+## than through. The shape is shared per source mesh — ninety separate ones
+## would be well over a million triangles of collision in memory.
 static func scatter(parent: Node3D, category: String, radius: float,
 		patch_size := 9.0, density := 1.4, rng: RandomNumberGenerator = null,
 		sink := 0.06, inner := 0.0, avoid: Array = [],
-		square := false) -> Node3D:
+		square := false, solid := false) -> Node3D:
 	var paths := Props.list(category)
 	if paths.is_empty():
 		return null
@@ -63,7 +67,10 @@ static func scatter(parent: Node3D, category: String, radius: float,
 	var placed: Array[Vector2] = []
 	# Spacing under patch_size is what forces the overlap. Squared once here
 	# rather than per comparison in the loop below.
-	var spacing: float = patch_size * 0.52
+	# 0.52 left visible seams between patches. At 0.34 each one is laid down
+	# roughly three times its own spacing wide, so every edge is buried under
+	# two neighbours and the field reads as one surface.
+	var spacing: float = patch_size * 0.34
 	var min_d2: float = spacing * spacing
 
 	var tries := 0
@@ -118,6 +125,8 @@ static func scatter(parent: Node3D, category: String, radius: float,
 		if mm != null:
 			root.add_child(mm)
 			made += 1
+			if solid:
+				_add_collision(root, String(path), mm.multimesh)
 	return root
 
 
@@ -168,6 +177,27 @@ static func _build(path: String, spots: Array, patch_size: float,
 ##
 ## Scale comes from the WIDER horizontal axis, so a patch always covers at
 ## least patch_size across whichever way the generator happened to orient it.
+## One static body per instance, all sharing one shape resource.
+##
+## Bodies, not one merged mesh: the transforms already exist in the MultiMesh,
+## and reusing them means the collision cannot drift from what is drawn.
+static func _add_collision(root: Node3D, path: String, mm: MultiMesh) -> void:
+	var shape := Props.trimesh_shape(path)
+	if shape == null:
+		return
+	for i in mm.instance_count:
+		var body := StaticBody3D.new()
+		# Scenery layer: the player steps over these, creatures ignore them.
+		# An enemy catching its foot on a twig is a stuck enemy.
+		body.collision_layer = Props.SCENERY_LAYER
+		body.collision_mask = 0
+		var col := CollisionShape3D.new()
+		col.shape = shape
+		body.add_child(col)
+		root.add_child(body)
+		body.transform = mm.get_instance_transform(i)
+
+
 static func plan(box: AABB, spots: Array, patch_size: float,
 		rng: RandomNumberGenerator, sink: float) -> Array[Transform3D]:
 	var across: float = maxf(maxf(box.size.x, box.size.z), 0.0001)
@@ -177,7 +207,7 @@ static func plan(box: AABB, spots: Array, patch_size: float,
 		var at: Vector2 = spots[i]
 		# Size varies per instance. Without it the eye finds the repeat almost
 		# immediately, however random the positions are.
-		var s: float = base_scale * rng.randf_range(0.75, 1.45)
+		var s: float = base_scale * rng.randf_range(0.70, 1.60)
 		var basis := Basis()
 		basis = basis.rotated(Vector3.UP, rng.randf() * TAU)
 		# A degree or two of tilt, so patches are not all perfectly coplanar.

@@ -306,10 +306,17 @@ func _cave() -> void:
 		add_child(cone)
 		cone.position = p + Vector3(0, h * 0.5, 0)
 
-	for i in 14:
-		var p := _spot(14.0, 20.0)
-		var h := _rng.randf_range(10.0, 20.0)
-		_cyl(_rng.randf_range(1.0, 2.4), h, p + Vector3(0, 22.0 - h * 0.5, 0), dark, false)
+	# Hanging columns, or sky islands where a set provides them. The columns
+	# were always a stand-in for "there is more world above you"; a floating
+	# island says it far better and does not need a roof to hang from.
+	if dressed and Props.has_any(_prop_set() + "_sky"):
+		_sky_islands(_prop_set())
+	else:
+		for i in 14:
+			var p := _spot(14.0, 20.0)
+			var h := _rng.randf_range(10.0, 20.0)
+			_cyl(_rng.randf_range(1.0, 2.4), h,
+				p + Vector3(0, 22.0 - h * 0.5, 0), dark, false)
 
 	for i in (0 if dressed else 18):
 		var p := _spot(6.0, 8.0)
@@ -570,7 +577,8 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 		if not Props.has_any(key + "_ground"):
 			continue
 		var g := Scatter.scatter(self, key + "_ground", _half * 0.98,
-			16.0, 0.95 if key == set_id else 0.35, _rng, 0.10, 0.0, [], true)
+			16.0, 1.35 if key == set_id else 0.4, _rng, 0.10, 0.0, [], true,
+			key == set_id)
 		if g != null:
 			g.name = key.capitalize() + "Ground"
 
@@ -589,7 +597,14 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			var h := _rng.randf_range(3.0, 6.5)
 			# hull=true: a boulder you can run up and stand on, rather than an
 			# invisible pillar the width of its widest point.
-			var rock := Props.spawn_solid(set_id + "_rock", h, 0.0, _rng, true)
+			#
+			# Sunk 12%. Grounding puts the LOWEST vertex on the floor, which on
+			# a slanted rock means it balances on one corner — you can see the
+			# gap under the high side, and from a low angle you see straight
+			# into the hollow shell. Bedding it in costs nothing and there is
+			# no such thing as a boulder resting on a point.
+			var rock := Props.spawn_solid(set_id + "_rock", h, 0.0, _rng, true,
+				-0.12)
 			if rock == null:
 				continue
 			add_child(rock)
@@ -606,7 +621,8 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			var r: float = path_r * _rng.randf_range(0.94, 1.08)
 			var at := Vector3(cos(a) * r, 0, sin(a) * r)
 			var sh := _rng.randf_range(2.0, 5.0)
-			var srock := Props.spawn_solid(set_id + "_rock", sh, 0.0, _rng, true)
+			var srock := Props.spawn_solid(set_id + "_rock", sh, 0.0, _rng, true,
+				-0.14)
 			if srock == null:
 				continue
 			add_child(srock)
@@ -726,3 +742,32 @@ func _sets(own: String, extra: String) -> Array:
 	if extra == "" or extra == own:
 		return [own]
 	return [own, extra]
+
+
+## Floating islands overhead.
+##
+## Placed high and wide rather than densely: they are skyline, and the moment
+## one is close enough to read as reachable the player will try to reach it.
+## Spread across a band well outside the arena so they frame it instead of
+## hanging over the fight.
+func _sky_islands(set_id: String) -> void:
+	var count := 9
+	for i in count:
+		var a := TAU * float(i) / float(count) + _rng.randf_range(-0.35, 0.35)
+		var r: float = _half * _rng.randf_range(0.75, 1.55)
+		var size := _rng.randf_range(14.0, 34.0)
+		# No collision: an island you can land on is a platform, and this level
+		# has no way up to one.
+		var isle := Props.spawn(set_id + "_sky", size, _rng)
+		if isle == null:
+			continue
+		add_child(isle)
+		isle.position = Vector3(
+			cos(a) * r,
+			_rng.randf_range(34.0, 62.0),
+			sin(a) * r)
+		# Tipped, because a flat-bottomed slab reads as a floor tile in the
+		# sky. A few degrees is enough to say "this is a broken piece of
+		# something".
+		isle.rotation.x = _rng.randf_range(-0.16, 0.16)
+		isle.rotation.z = _rng.randf_range(-0.16, 0.16)

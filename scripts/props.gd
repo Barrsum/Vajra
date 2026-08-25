@@ -126,12 +126,12 @@ static func has_any(category: String) -> bool:
 ## normal case: a world should ask for "a night tree", not restate a number
 ## someone already stood next to it and chose.
 static func spawn(category: String, height := -1.0,
-		rng: RandomNumberGenerator = null) -> Node3D:
+		rng: RandomNumberGenerator = null, offset := INF) -> Node3D:
 	var paths := list(category)
 	if paths.is_empty():
 		return null
 	var i := (rng.randi() if rng != null else randi()) % paths.size()
-	return spawn_path(paths[i], height, rng)
+	return spawn_path(paths[i], height, rng, offset)
 
 
 static func spawn_path(path: String, height := -1.0,
@@ -181,8 +181,9 @@ static func spawn_path(path: String, height := -1.0,
 ## hull is a few dozen planes, follows the real silhouette, and gives sloped
 ## sides you can run up and stand on.
 static func spawn_solid(category: String, height := -1.0, radius := 0.0,
-		rng: RandomNumberGenerator = null, hull := false) -> Node3D:
-	var node := spawn(category, height, rng)
+		rng: RandomNumberGenerator = null, hull := false,
+		offset := INF) -> Node3D:
+	var node := spawn(category, height, rng, offset)
 	if node == null:
 		return null
 	# The node knows its real height even when -1 was asked for.
@@ -230,6 +231,30 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	body.collision_mask = 0
 	node.add_child(body)
 	return node
+
+
+## Exact collision for a mesh, cached per resource path.
+##
+## Shared, not per instance. A ground patch is ~19k triangles and a level has
+## ninety of them; ninety separate shapes would be 1.7 million triangles of
+## collision geometry in memory. Nine shapes reused ninety times is nine.
+static var _tri_shapes := {}
+
+
+static func trimesh_shape(path: String) -> ConcavePolygonShape3D:
+	if _tri_shapes.has(path):
+		return _tri_shapes[path]
+	var packed: PackedScene = load(path)
+	if packed == null:
+		return null
+	var probe: Node3D = packed.instantiate()
+	var mi := _first_mesh(probe)
+	var shape: ConcavePolygonShape3D = null
+	if mi != null:
+		shape = mi.mesh.create_trimesh_shape()
+	probe.free()
+	_tri_shapes[path] = shape
+	return shape
 
 
 static func _first_mesh(n: Node) -> MeshInstance3D:

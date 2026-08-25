@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://fq0d5wpaubtt"
-path="res://.godot/imported/test_tree_0.webp-fe69166a009cbc831c5d5ae244e4d656.ctex"
+uid="uid://cegojriokvw8m"
+path="res://.godot/imported/oak_tree_0.webp-0b4b9f5f079f41c9a576dd2a3a334563.ctex"
 metadata={
 "vram_texture": false
 }
@@ -13,8 +13,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://assets/props/test_tree_0.webp"
-dest_files=["res://.godot/imported/test_tree_0.webp-fe69166a009cbc831c5d5ae244e4d656.ctex"]
+source_file="res://assets/props/forest/oak_tree_0.webp"
+dest_files=["res://.godot/imported/oak_tree_0.webp-0b4b9f5f079f41c9a576dd2a3a334563.ctex"]
 
 [params]
 

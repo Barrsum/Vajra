@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://di7lbe8pvngwm"
-path="res://.godot/imported/test_tree_1.webp-050cf6d9fc4e214a54017a5e6279036b.ctex"
+uid="uid://cet2ufjjc7lo"
+path="res://.godot/imported/snowy_tree_0.webp-3dd37e827c119b359ab1bf82ee5360c0.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "1da63165ae89c58dcaa604164b563fb0"
+"md5": "a082f221cc50ee44c042562004f3dc28"
 }
 
 [deps]
 
-source_file="res://assets/props/forest/test_tree_1.webp"
-dest_files=["res://.godot/imported/test_tree_1.webp-050cf6d9fc4e214a54017a5e6279036b.ctex"]
+source_file="res://assets/props/night/snowy_tree_0.webp"
+dest_files=["res://.godot/imported/snowy_tree_0.webp-3dd37e827c119b359ab1bf82ee5360c0.ctex"]
 
 [params]
 

@@ -11,15 +11,27 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("")
 	print("=== generated props ===")
-	var d := DirAccess.open(DIR)
-	if d == null:
+	# Props live in per-world subfolders, so walk one level down.
+	var top := DirAccess.open(DIR)
+	if top == null:
 		print("  no props folder")
 		get_tree().quit(0)
 		return
-	for f in d.get_files():
-		if not f.ends_with(".glb"):
+	var files: Array = []
+	for cat in top.get_directories():
+		var d := DirAccess.open(DIR + cat)
+		if d == null:
 			continue
-		var packed: PackedScene = load(DIR + f)
+		for f in d.get_files():
+			if f.ends_with(".glb"):
+				files.append([cat + "/" + f, DIR + cat + "/" + f])
+	if files.is_empty():
+		print("  nothing generated yet")
+		get_tree().quit(0)
+		return
+	for pair in files:
+		var f: String = pair[0]
+		var packed: PackedScene = load(pair[1])
 		if packed == null:
 			print("  %-24s FAILED TO LOAD" % f)
 			continue

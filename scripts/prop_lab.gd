@@ -26,6 +26,8 @@ var _pitch := -0.12
 var _speed := 14.0
 var _hud: Label
 var _free_mouse := false
+## The reference figure, moved beside whichever prop is selected.
+var _figure: Node3D
 
 
 func _ready() -> void:
@@ -35,6 +37,11 @@ func _ready() -> void:
 	_layout()
 	_camera()
 	_ui()
+	# Start looking AT the first prop rather than at empty floor. The camera
+	# used to sit at a fixed spot and the props were laid out to one side, so
+	# the opening frame was a grid and nothing else.
+	if not _items.is_empty():
+		_focus()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -106,6 +113,12 @@ func _lights() -> void:
 ## A 1.8m figure at the origin. Every judgement about prop size is really a
 ## judgement about size relative to the player, so the player has to be here.
 func _reference_figure() -> void:
+	# Parented into one node so it can WALK to whichever prop is selected.
+	# Left standing at the origin it was simply off screen the moment the
+	# camera framed a prop, which makes it decorative rather than useful.
+	_figure = Node3D.new()
+	add_child(_figure)
+
 	var m := StandardMaterial3D.new()
 	m.albedo_color = Color(0.95, 0.45, 0.15)
 	m.roughness = 0.6
@@ -116,7 +129,7 @@ func _reference_figure() -> void:
 	cap.height = 1.5
 	body.mesh = cap
 	body.material_override = m
-	add_child(body)
+	_figure.add_child(body)
 	body.position = Vector3(0, 0.9, 0)
 
 	var head := MeshInstance3D.new()
@@ -125,17 +138,32 @@ func _reference_figure() -> void:
 	sm.height = 0.28
 	head.mesh = sm
 	head.material_override = m
-	add_child(head)
+	_figure.add_child(head)
 	head.position = Vector3(0, 1.72, 0)
 
-	_tag("1.8 m — the player", Vector3(0, 2.1, 0), Color(1.0, 0.7, 0.35))
+	var l := Label3D.new()
+	l.text = "1.8 m — the player"
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.fixed_size = true
+	l.pixel_size = 0.0011
+	l.modulate = Color(1.0, 0.7, 0.35)
+	l.outline_size = 10
+	_figure.add_child(l)
+	l.position = Vector3(0, 2.1, 0)
 
 
 func _layout() -> void:
 	var x := SPACING
 	for cat in CATEGORIES:
-		for path in Props.list(cat):
-			var name := path.get_file().get_basename()
+		for path_v in Props.list(cat):
+			# Two traps on one line, both hit before in this project.
+			# list() returns an untyped Array, so `path_v` is a Variant and
+			# anything inferred from it cannot be typed — hence String() here.
+			# And `var name` in a Node script SHADOWS Node.name, which does not
+			# error where you wrote it; the script simply fails to parse.
+			var path := String(path_v)
+			var prop_name := path.get_file().get_basename()
 			# 8m is a middling tree: tall enough to read as scenery, short
 			# enough that a wrong guess is obvious rather than absurd.
 			var h := 8.0
@@ -144,10 +172,10 @@ func _layout() -> void:
 				continue
 			add_child(node)
 			node.position = Vector3(x, 0, 0)
-			var label := _tag("%s  ·  %s" % [name, cat],
+			var label := _tag("%s  ·  %s" % [prop_name, cat],
 				Vector3(x, 0.0, 0), Color(1, 1, 1))
 			_items.append({
-				"node": node, "name": name, "category": cat,
+				"node": node, "name": prop_name, "category": cat,
 				"height": h, "label": label, "path": path, "x": x,
 			})
 			x += SPACING
@@ -314,6 +342,9 @@ func _resize(dir: int) -> void:
 func _focus() -> void:
 	var it: Dictionary = _items[_sel]
 	var h: float = float(it["height"])
+	# Stand the reference beside the prop, far enough out not to intersect a
+	# wide canopy but close enough to compare at a glance.
+	_figure.position = Vector3(float(it["x"]) - maxf(2.5, h * 0.34), 0, 1.2)
 	# Back off proportionally, so a 30m landmark and a 2m crate both fill a
 	# similar part of the screen when selected.
 	_cam.global_position = Vector3(float(it["x"]) - h * 0.9, h * 0.55, h * 1.5)

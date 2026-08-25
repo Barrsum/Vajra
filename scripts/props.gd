@@ -95,6 +95,24 @@ static func list(category: String) -> Array:
 	return out
 
 
+## Every category folder that actually contains something.
+##
+## Discovered rather than listed. A hardcoded list went stale the moment the
+## snow set moved from "night" to "snow", and the prop lab silently showed
+## nothing — it exited non-zero with no failing assertion, which is the worst
+## kind of broken test.
+static func categories() -> Array:
+	var out: Array = []
+	var d := DirAccess.open(DIR)
+	if d == null:
+		return out
+	for c in d.get_directories():
+		if not list(c).is_empty():
+			out.append(c)
+	out.sort()
+	return out
+
+
 static func has_any(category: String) -> bool:
 	return not list(category).is_empty()
 
@@ -154,8 +172,16 @@ static func spawn_path(path: String, height := -1.0,
 ## Deliberately a cylinder around the base rather than a mesh collider: a
 ## 20k-triangle tree makes a 20k-triangle collision shape, and the player only
 ## ever bumps into the bottom two metres of it anyway.
+## `hull` swaps the cheap cylinder for a convex hull of the actual mesh.
+##
+## A cylinder is right for a tree: the player only ever brushes the trunk, and
+## a hull of a 20k-triangle conifer would be a hull of its branches. It is
+## wrong for a boulder — with a cylinder you cannot climb a rock, you bump into
+## an invisible pillar the width of its widest point and slide off. A convex
+## hull is a few dozen planes, follows the real silhouette, and gives sloped
+## sides you can run up and stand on.
 static func spawn_solid(category: String, height := -1.0, radius := 0.0,
-		rng: RandomNumberGenerator = null) -> Node3D:
+		rng: RandomNumberGenerator = null, hull := false) -> Node3D:
 	var node := spawn(category, height, rng)
 	if node == null:
 		return null
@@ -163,6 +189,23 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	var real: float = _bounds(node).size.y * node.scale.y
 	if height < 0.0:
 		height = real
+
+	if hull:
+		var mi := _first_mesh(node)
+		if mi != null:
+			var body := StaticBody3D.new()
+			var col := CollisionShape3D.new()
+			# clean=true welds the near-duplicate vertices a generated mesh is
+			# full of; simplify=true drops the hull down to something a physics
+			# step can afford.
+			col.shape = mi.mesh.create_convex_shape(true, true)
+			body.add_child(col)
+			body.collision_layer = SCENERY_LAYER
+			body.collision_mask = 0
+			# Under the MeshInstance, so it inherits the same transform the
+			# visible mesh has and cannot drift from it.
+			mi.add_child(body)
+			return node
 	var body := StaticBody3D.new()
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
@@ -187,6 +230,16 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	body.collision_mask = 0
 	node.add_child(body)
 	return node
+
+
+static func _first_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		return n
+	for c in n.get_children():
+		var r := _first_mesh(c)
+		if r != null:
+			return r
+	return null
 
 
 static func _bounds(n: Node) -> AABB:

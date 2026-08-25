@@ -39,6 +39,12 @@ func _ready() -> void:
 	var has_save: bool = Game.unlocked > 0 or Game.cleared.size() > 0
 	var cont := _button("CONTINUE", false, func() -> void: Game.to_select())
 	cont.disabled = not has_save
+	# Only after the story is finished. Showing a locked button would advertise
+	# the mode and then refuse it, which is worse than not mentioning it — and
+	# the whole point of holding it back is that the terrain overlay reads as a
+	# bug until the game has told you the rules changed.
+	if Game.endless_unlocked:
+		_button("ENDLESS", false, func() -> void: Game.start_endless())
 	_button("QUIT", false, func() -> void: Game.quit())
 
 	set_process(true)

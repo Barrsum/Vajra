@@ -50,6 +50,16 @@ var total_kills := 0
 ## Highest world reached. Everything up to and including this is playable, so
 ## testing a later level never means replaying the earlier ones.
 var unlocked := 0
+## Endless mode. Unlocked by finishing the story, and OFF until deliberately
+## started — the terrain overlay it enables is a good look and a bad first
+## impression, because a snow drift in a cave reads as a bug until the game has
+## already told you the rules changed.
+var endless_unlocked := false
+var endless := false
+## Which set overlays the world's own in endless mode. Rerolled per world so a
+## run is not the same mix every time.
+var _endless_set := ""
+const ENDLESS_SETS := ["snow"]
 var cleared: Array = []
 
 
@@ -158,9 +168,13 @@ func _build_default_worlds() -> void:
 	cave.moon_energy = 0.0
 
 	cave.glow_intensity = 0.35
-	cave.ground_color = Color(0.24, 0.25, 0.27)
-	cave.prop_color = Color(0.22, 0.22, 0.23)
-	cave.accent_color = Color(0.52, 0.58, 0.62)
+	# Snow. The base ground shows through everywhere the scattered patches do
+	# not reach, so it has to already be the right colour rather than something
+	# the patches are expected to hide.
+	cave.ground_color = Color(0.66, 0.71, 0.80)
+	cave.prop_color = Color(0.34, 0.36, 0.42)
+	cave.accent_color = Color(0.72, 0.84, 1.00)
+	cave.prop_set = "snow"
 	cave.aerial_perspective = 0.35
 	cave.arena_size = 120.0
 	worlds.append(cave)
@@ -279,8 +293,8 @@ func _build_default_worlds() -> void:
 	# patches are expected to hide. Blue-grey rather than white: lit by
 	# lamplight it reads as snow, and pure white would blow out under the
 	# campfires.
-	night.ground_color = Color(0.66, 0.71, 0.80)
-	night.prop_color = Color(0.34, 0.36, 0.42)
+	night.ground_color = Color(0.15, 0.15, 0.19)
+	night.prop_color = Color(0.24, 0.24, 0.29)
 	night.accent_color = Color(1.0, 0.62, 0.28)
 	night.arena_size = 115.0
 	worlds.append(night)
@@ -387,6 +401,7 @@ func save_progress() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("progress", "unlocked", unlocked)
 	cfg.set_value("progress", "cleared", cleared)
+	cfg.set_value("progress", "endless_unlocked", endless_unlocked)
 	cfg.save(SAVE_PATH)
 
 
@@ -396,15 +411,19 @@ func load_progress() -> void:
 		return
 	unlocked = int(cfg.get_value("progress", "unlocked", 0))
 	cleared = cfg.get_value("progress", "cleared", [])
+	endless_unlocked = bool(cfg.get_value("progress", "endless_unlocked", false))
 
 
 func reset_progress() -> void:
 	unlocked = 0
 	cleared = []
+	endless_unlocked = false
+	endless = false
 	save_progress()
 
 
 func _enter_world() -> void:
+	_endless_set = ENDLESS_SETS.pick_random() if endless else ""
 	collected = 0
 	_reset_run_stats()
 	_set_state(State.PLAYING)
@@ -439,9 +458,25 @@ func add_drop(amount := 1) -> bool:
 
 
 ## Called by the outro once the camera move is done and the robot is posed.
+func endless_set() -> String:
+	return _endless_set
+
+
+func start_endless() -> void:
+	if not endless_unlocked:
+		return
+	endless = true
+	world_index = 0
+	_enter_world()
+
+
 func finish_outro() -> void:
 	if state != State.OUTRO:
 		return
+	# Finishing the story is what opens endless. Saved immediately, because a
+	# reward you have to earn twice is not a reward.
+	endless_unlocked = true
+	save_progress()
 	_set_state(State.VICTORY)
 	get_tree().paused = true
 
@@ -470,7 +505,10 @@ func toggle_pause() -> void:
 		get_tree().paused = false
 
 
+## Leaving to the menu ends an endless run — otherwise starting the story
+## afterwards would quietly still have the overlay on.
 func to_menu() -> void:
+	endless = false
 	get_tree().paused = false
 	_set_state(State.MENU)
 	get_tree().change_scene_to_file(MENU_SCENE)

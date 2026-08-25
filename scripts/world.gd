@@ -274,8 +274,14 @@ func _forest() -> void:
 
 
 func _cave() -> void:
+	# Once a real asset set dresses this world, the procedural filler goes.
+	# Untextured cones and boxes standing among photoscanned rock do not read
+	# as a different art style, they read as unfinished — which is what they
+	# are. The wall stays because nothing generated replaces it yet, but it
+	# goes darker so it sits back as cliff rather than competing.
+	var dressed: bool = _prop_set() != "" and not OS.has_environment("VAJRA_NO_DRESS")
 	var rock := _mat(_prop_color(), 0.95)
-	var dark := _mat(_prop_color().darkened(0.45), 0.98)
+	var dark := _mat(_prop_color().darkened(0.45 if not dressed else 0.72), 0.98)
 
 	# A ring of rock forming a bowl, open to a bright sky.
 	var count := 40
@@ -287,7 +293,7 @@ func _cave() -> void:
 			Vector3(sin(a) * r, h * 0.5 - 2.0, cos(a) * r), dark, true, a)
 
 	# Stalagmites, and a few hanging columns to imply a roof edge.
-	for i in 30:
+	for i in (0 if dressed else 30):
 		var p := _spot(8.0, 12.0)
 		var h := _rng.randf_range(2.5, 9.0)
 		var cone := MeshInstance3D.new()
@@ -305,7 +311,7 @@ func _cave() -> void:
 		var h := _rng.randf_range(10.0, 20.0)
 		_cyl(_rng.randf_range(1.0, 2.4), h, p + Vector3(0, 22.0 - h * 0.5, 0), dark, false)
 
-	for i in 18:
+	for i in (0 if dressed else 18):
 		var p := _spot(6.0, 8.0)
 		_box(Vector3(_rng.randf_range(1.0, 3.0), _rng.randf_range(0.6, 1.6),
 			_rng.randf_range(1.0, 3.0)), p + Vector3(0, 0.5, 0), rock, false, _rng.randf() * TAU)
@@ -314,9 +320,14 @@ func _cave() -> void:
 	# things growing at a cave mouth get less light.
 	var scrub := Foliage.make_material(
 		Color(0.30, 0.44, 0.26), Color(0.30, 0.26, 0.22))
-	for i in 2:
-		_tree(_spot(16.0, 20.0), _rng.randf_range(9.0, 12.0),
-			_rng.randf_range(3.4, 4.4), scrub, 3)
+	for i in (0 if dressed else 2):
+		_procedural_trees.append(_tree(_spot(16.0, 20.0),
+			_rng.randf_range(9.0, 12.0), _rng.randf_range(3.4, 4.4), scrub, 3))
+
+	if not OS.has_environment("VAJRA_NO_DRESS"):
+		# The rock ring sits at 0.96 of the half-size, so keep generated props
+		# inside it — a tree spawned in the wall is a tree in a wall.
+		_dress(_half * 0.86, 6.0)
 
 
 func _ocean() -> void:
@@ -514,10 +525,19 @@ func _night() -> void:
 	# it is how the level 4 set-piece regression was pinned to scenery
 	# collision in one run rather than by bisecting the dressing code.
 	if not OS.has_environment("VAJRA_NO_DRESS"):
-		_dress_night(pr, pw, fire_r)
+		# Campfires carry barriers, so nothing may spawn inside one — a tree in
+		# a fire is a tree the player can see and never reach.
+		var keep_out: Array = []
+		for i in 4:
+			var a := TAU * (float(i) + 0.5) / 4.0
+			keep_out.append(Vector3(cos(a) * fire_r, sin(a) * fire_r, 7.0))
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				keep_out.append(Vector3(sx * pr, sz * pr, 4.0))
+		_dress(pr, pw, keep_out)
 
 
-## Lays the generated snow set over the built level.
+## Lays the world's generated asset set over the built level.
 ##
 ## Order matters, and it is the order a real place is built in: ground first,
 ## everything else standing on it. Ground goes everywhere including under the
@@ -526,16 +546,16 @@ func _night() -> void:
 ##
 ## Every step degrades to nothing when its category is empty, so the level
 ## still builds before any assets exist for it.
-func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
-	# Nothing may spawn on a campfire — each carries a barrier, so a tree
-	# inside one is a tree the player can see and never reach.
-	var keep_out: Array = []
-	for i in 4:
-		var a := TAU * (float(i) + 0.5) / 4.0
-		keep_out.append(Vector3(cos(a) * fire_r, sin(a) * fire_r, 7.0))
-	for sx in [-1.0, 1.0]:
-		for sz in [-1.0, 1.0]:
-			keep_out.append(Vector3(sx * path_r, sz * path_r, 4.0))
+func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
+	var w: Resource = Game.current_world()
+	var set_id: String = String(w.prop_set) if w != null else ""
+	if set_id == "":
+		return
+	# Endless mode overlays a second set on top of the world's own. Held back
+	# until the story is finished: it is a good look and a bad first
+	# impression, because a snow drift in a cave reads as a bug until the game
+	# has already told you the rules changed.
+	var extra: String = Game.endless_set() if Game.endless else ""
 
 	# --- ground ------------------------------------------------------------
 	# Square, because the arena is: a disc of patches leaves the corners bare
@@ -546,17 +566,19 @@ func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
 	# A patch costs ~19k triangles whatever size it is drawn at, so covering
 	# the arena with big ones costs a fraction of covering it with small ones,
 	# and at ground level nobody reads the difference.
-	if Props.has_any("night_ground"):
-		var g := Scatter.scatter(self, "night_ground", _half * 0.98,
-			16.0, 0.95, _rng, 0.10, 0.0, [], true)
+	for key in _sets(set_id, extra):
+		if not Props.has_any(key + "_ground"):
+			continue
+		var g := Scatter.scatter(self, key + "_ground", _half * 0.98,
+			16.0, 0.95 if key == set_id else 0.35, _rng, 0.10, 0.0, [], true)
 		if g != null:
-			g.name = "SnowGround"
+			g.name = key.capitalize() + "Ground"
 
 	# --- big rocks ---------------------------------------------------------
 	# Placed, not scattered. There are only a handful and each is a landmark
 	# you navigate by, so they want spreading deliberately rather than
 	# clustering wherever the random happened to land. Solid, so they are cover.
-	if Props.has_any("night_rock"):
+	if Props.has_any(set_id + "_rock"):
 		var rocks := 7
 		for i in rocks:
 			var a := TAU * float(i) / float(rocks) + _rng.randf_range(-0.3, 0.3)
@@ -565,18 +587,36 @@ func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
 			if _blocked(at, keep_out):
 				continue
 			var h := _rng.randf_range(3.0, 6.5)
-			var rock := Props.spawn_solid("night_rock", h, h * 0.34, _rng)
+			# hull=true: a boulder you can run up and stand on, rather than an
+			# invisible pillar the width of its widest point.
+			var rock := Props.spawn_solid(set_id + "_rock", h, 0.0, _rng, true)
 			if rock == null:
 				continue
 			add_child(rock)
 			rock.position = Vector3(at.x, rock.position.y, at.z)
 			keep_out.append(Vector3(at.x, at.z, h * 0.8))
 
+	# A skirt of rocks around the rim. Without it the generated ground stops
+	# dead against the built wall, and a hard line is the one thing a scatter
+	# exists to prevent.
+	if Props.has_any(set_id + "_rock"):
+		var skirt := 14
+		for i in skirt:
+			var a := TAU * float(i) / float(skirt) + _rng.randf_range(-0.18, 0.18)
+			var r: float = path_r * _rng.randf_range(0.94, 1.08)
+			var at := Vector3(cos(a) * r, 0, sin(a) * r)
+			var sh := _rng.randf_range(2.0, 5.0)
+			var srock := Props.spawn_solid(set_id + "_rock", sh, 0.0, _rng, true)
+			if srock == null:
+				continue
+			add_child(srock)
+			srock.position = Vector3(at.x, srock.position.y, at.z)
+
 	# --- trees -------------------------------------------------------------
 	# Replaces the procedural canopies rather than joining them. Mixing the two
 	# looks worse than either alone — a low-poly blob beside a photoscanned
 	# conifer reads as a bug, not as variety.
-	if Props.has_any("night"):
+	if Props.has_any(set_id + "_tree"):
 		for old in _procedural_trees:
 			if is_instance_valid(old):
 				old.queue_free()
@@ -598,7 +638,7 @@ func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
 			# Wide height spread. One tree species repeated is a forest; one
 			# tree SIZE repeated is wallpaper.
 			var h := _rng.randf_range(7.0, 17.0)
-			var t := Props.spawn_solid("night", h, h * 0.045, _rng)
+			var t := Props.spawn_solid(set_id + "_tree", h, h * 0.045, _rng)
 			if t == null:
 				continue
 			add_child(t)
@@ -610,11 +650,14 @@ func _dress_night(path_r: float, path_w: float, fire_r: float) -> void:
 	# Scattered rather than placed, and deliberately NOT solid: they are ankle
 	# height, and a player caught on invisible shrubbery mid-dodge is a bug
 	# report every time.
-	if Props.has_any("night_bush"):
-		var b := Scatter.scatter(self, "night_bush", _half * 0.90,
-			2.2, 0.34, _rng, 0.12, 14.0, keep_out, true)
+	for key in _sets(set_id, extra):
+		if not Props.has_any(key + "_bush"):
+			continue
+		var b := Scatter.scatter(self, key + "_bush", _half * 0.90,
+			2.2, 0.34 if key == set_id else 0.14, _rng, 0.12, 14.0,
+			keep_out, true)
 		if b != null:
-			b.name = "SnowBushes"
+			b.name = key.capitalize() + "Bushes"
 
 
 func _blocked(at: Vector3, zones: Array) -> bool:
@@ -671,3 +714,15 @@ func _street() -> void:
 		var s := _rng.randf_range(0.5, 1.6)
 		_box(Vector3(s, s * 0.7, s), p + Vector3(0, s * 0.35, 0), _mat(_prop_color()),
 			false, _rng.randf() * TAU)
+
+
+func _prop_set() -> String:
+	var w: Resource = Game.current_world()
+	return String(w.prop_set) if w != null else ""
+
+
+## The world's own set, plus the endless overlay when there is one.
+func _sets(own: String, extra: String) -> Array:
+	if extra == "" or extra == own:
+		return [own]
+	return [own, extra]

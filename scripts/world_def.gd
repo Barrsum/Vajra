@@ -65,6 +65,14 @@ class_name WorldDef
 ## player's next hit instead of hurting them, so it reads as the world helping.
 @export var storm_on := false
 
+## Which generated asset set dresses this world: assets/props/<set>_ground,
+## <set>_rock, <set>_bush, <set>_tree. Empty means the world builds bare.
+##
+## A NAME rather than the world's own, so a set can move between worlds without
+## moving a single file — which is exactly what was needed when the snow set
+## turned out to belong to world 2 and not world 4.
+@export var prop_set := ""
+
 @export_group("Sky")
 ## The stylised sky shader. Time of day is not a separate setting: it falls out
 ## of where `sun_angles` puts the key light. Point the sun below the horizon and

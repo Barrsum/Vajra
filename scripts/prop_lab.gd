@@ -16,7 +16,6 @@ extends Node3D
 const Props := preload("res://scripts/props.gd")
 const Scatter := preload("res://scripts/ground_scatter.gd")
 
-const CATEGORIES := ["forest", "cave", "dust", "night"]
 const SPACING := 14.0
 
 var _items: Array = []          # [{node, name, category, height, label}]
@@ -159,7 +158,7 @@ func _reference_figure() -> void:
 
 func _layout() -> void:
 	var x := SPACING
-	for cat in CATEGORIES:
+	for cat in Props.categories():
 		for path_v in Props.list(cat):
 			# Two traps on one line, both hit before in this project.
 			# list() returns an untyped Array, so `path_v` is a Variant and

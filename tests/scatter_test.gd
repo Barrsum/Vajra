@@ -15,10 +15,9 @@ func _ready() -> void:
 	print("=== ground scatter ===")
 
 	var cat := ""
-	for c in ["forest", "cave", "dust", "night"]:
-		if Props.has_any(c):
-			cat = c
-			break
+	var found := Props.categories()
+	if not found.is_empty():
+		cat = String(found[0])
 	if cat == "":
 		print("  nothing generated yet — skipped")
 		_done()

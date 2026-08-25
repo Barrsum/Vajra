@@ -13,7 +13,7 @@ const Props := preload("res://scripts/props.gd")
 func _ready() -> void:
 	await get_tree().process_frame
 	print("")
-	for cat in ["forest", "cave", "dust", "night"]:
+	for cat in Props.categories():
 		for p in Props.list(cat):
 			print("=== %s ===" % p)
 			var raw: Node3D = (load(p) as PackedScene).instantiate()

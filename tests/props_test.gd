@@ -11,8 +11,8 @@ func _ready() -> void:
 	print("")
 	print("=== generated props ===")
 
-	for cat in ["forest", "cave", "dust", "night"]:
-		print("  %-8s %d asset(s)" % [cat, Props.list(cat).size()])
+	for cat in Props.categories():
+		print("  %-14s %d asset(s)" % [cat, Props.list(cat).size()])
 
 	# An empty category must not error. Most categories are empty for most of
 	# development, and every world has to keep running regardless.
@@ -22,10 +22,9 @@ func _ready() -> void:
 	# Whichever category actually has assets. Pinning this to "forest" meant
 	# the real checks silently stopped running the moment that folder emptied.
 	var cat := ""
-	for c in ["forest", "cave", "dust", "night"]:
-		if Props.has_any(c):
-			cat = c
-			break
+	var found := Props.categories()
+	if not found.is_empty():
+		cat = String(found[0])
 	if cat == "":
 		print("  (nothing generated yet — scaling checks skipped)")
 		_done()

@@ -1,0 +1,186 @@
+extends RefCounted
+## Scatters generated ground patches into a continuous, non-repeating surface.
+##
+## The technique is not tiling. TRELLIS patches are irregular blobs, not tiles
+## with matching edges — butt two together and you get a seam every time. So
+## they are OVERLAPPED instead: each patch is laid down larger than its
+## spacing, at a random turn and size, until the gaps are covered. Irregular
+## edges hiding under other irregular edges is what makes a scatter read as one
+## surface rather than as a grid of stamps. It is how ground clutter is done in
+## commercial engines, for the same reason.
+##
+## MULTIMESH, NOT NODES. Two hundred patch nodes is two hundred draw calls and
+## two hundred sets of culling work. A MultiMeshInstance3D draws every copy of
+## one mesh in a single call, so the cost of the two-hundredth patch is a
+## transform in a buffer. That is the difference between this being a nice idea
+## and this being usable.
+##
+## No class_name: registration has silently failed under --headless in this
+## project. Callers preload it.
+
+const Props := preload("res://scripts/props.gd")
+
+
+## Lay a field of patches over a disc of `radius` metres.
+##
+## `patch_size` is how wide one patch is in metres — ground is judged by how
+## much floor it covers, not by how tall it is, so this measures across rather
+## than up like Props.spawn does.
+##
+## `density` is patches per 100 square metres. Cover is roughly
+## density * (patch_size / spacing)^2, and overlapping is the point: below
+## about 1.6x coverage the gaps start showing.
+static func scatter(parent: Node3D, category: String, radius: float,
+		patch_size := 9.0, density := 1.4, rng: RandomNumberGenerator = null,
+		sink := 0.06, inner := 0.0) -> Node3D:
+	var paths := Props.list(category)
+	if paths.is_empty():
+		return null
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+
+	var root := Node3D.new()
+	root.name = "GroundScatter"
+	parent.add_child(root)
+
+	var area := PI * radius * radius
+	var total := int(area / 100.0 * density)
+	if total <= 0:
+		return root
+
+	# Instances are grouped by mesh, because a MultiMesh holds exactly one.
+	# More unique patches means more draw calls but far less visible repeat;
+	# five or six is the sweet spot.
+	var buckets := {}
+	for p in paths:
+		buckets[p] = []
+
+	var placed: Array[Vector2] = []
+	# Spacing under patch_size is what forces the overlap. Squared once here
+	# rather than per comparison in the loop below.
+	var spacing: float = patch_size * 0.52
+	var min_d2: float = spacing * spacing
+
+	var tries := 0
+	while placed.size() < total and tries < total * 30:
+		tries += 1
+		# Uniform over the disc: sqrt on the radius, or everything piles into
+		# the middle.
+		var a := rng.randf() * TAU
+		var r: float = sqrt(rng.randf()) * radius
+		if r < inner:
+			continue
+		var at := Vector2(cos(a) * r, sin(a) * r)
+
+		var clash := false
+		for q in placed:
+			if at.distance_squared_to(q) < min_d2:
+				clash = true
+				break
+		if clash:
+			continue
+		placed.append(at)
+
+		var path: String = paths[rng.randi() % paths.size()]
+		buckets[path].append(at)
+
+	var made := 0
+	for path in buckets:
+		var spots: Array = buckets[path]
+		if spots.is_empty():
+			continue
+		var mm := _build(String(path), spots, patch_size, rng, sink)
+		if mm != null:
+			root.add_child(mm)
+			made += 1
+	return root
+
+
+static func _build(path: String, spots: Array, patch_size: float,
+		rng: RandomNumberGenerator, sink: float) -> MultiMeshInstance3D:
+	var packed: PackedScene = load(path)
+	if packed == null:
+		return null
+	var probe: Node3D = packed.instantiate()
+	var found := _first_mesh(probe)
+	if found == null:
+		probe.free()
+		return null
+	var mesh: Mesh = found.mesh
+	var box: AABB = found.get_aabb()
+	probe.free()
+
+	var xforms := plan(box, spots, patch_size, rng, sink)
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = mm
+	node.name = "Patch_" + path.get_file().get_basename()
+	# Ground clutter casting shadows onto itself is a lot of shadow work for
+	# something already lying flat on the floor.
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The MultiMesh bounds are computed from instance transforms lazily, and a
+	# wrong one pops the whole field out of view at glancing angles.
+	node.custom_aabb = AABB(
+		Vector3(-1000, -20, -1000), Vector3(2000, 40, 2000))
+	return node
+
+
+## The per-instance transforms, as a plain array.
+##
+## Separate from the MultiMesh on purpose. A MultiMesh keeps its buffer in the
+## RenderingServer, and the headless driver does not retain it — read the
+## transforms back under --headless and every one is the identity. So a test
+## that asks the MultiMesh what it holds verifies nothing in the one
+## environment the suite actually runs in. Computing them here lets the test
+## check the real values.
+##
+## Scale comes from the WIDER horizontal axis, so a patch always covers at
+## least patch_size across whichever way the generator happened to orient it.
+static func plan(box: AABB, spots: Array, patch_size: float,
+		rng: RandomNumberGenerator, sink: float) -> Array[Transform3D]:
+	var across: float = maxf(maxf(box.size.x, box.size.z), 0.0001)
+	var base_scale: float = patch_size / across
+	var out: Array[Transform3D] = []
+	for i in spots.size():
+		var at: Vector2 = spots[i]
+		# Size varies per instance. Without it the eye finds the repeat almost
+		# immediately, however random the positions are.
+		var s: float = base_scale * rng.randf_range(0.75, 1.45)
+		var basis := Basis()
+		basis = basis.rotated(Vector3.UP, rng.randf() * TAU)
+		# A degree or two of tilt, so patches are not all perfectly coplanar.
+		basis = basis.rotated(Vector3.RIGHT, rng.randf_range(-0.03, 0.03))
+		basis = basis.rotated(Vector3.FORWARD, rng.randf_range(-0.03, 0.03))
+		basis = basis.scaled(Vector3.ONE * s)
+
+		# Ground it, sink it so the rim beds in rather than sitting proud, then
+		# stagger the height slightly. Coplanar overlapping surfaces z-fight;
+		# a fraction of a centimetre apart do not.
+		#
+		# The stagger CYCLES rather than accumulating. A straight i * 1.5mm
+		# reads fine over forty patches and floats the two-hundredth thirty
+		# centimetres off the floor — a bug that only shows up on the big
+		# fields this exists for. Twenty-four levels is more than enough to
+		# separate any two patches that actually overlap, and it is bounded.
+		var stagger: float = float(i % 24) * patch_size * 0.0001
+		var y: float = -box.position.y * s - sink * patch_size + stagger
+		out.append(Transform3D(basis, Vector3(at.x, y, at.y)))
+	return out
+
+
+static func _first_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		return n
+	for c in n.get_children():
+		var r := _first_mesh(c)
+		if r != null:
+			return r
+	return null

@@ -14,6 +14,7 @@ extends Node3D
 ## Run:  PROPS.bat
 
 const Props := preload("res://scripts/props.gd")
+const Scatter := preload("res://scripts/ground_scatter.gd")
 
 const CATEGORIES := ["forest", "cave", "dust", "night"]
 const SPACING := 14.0
@@ -28,6 +29,9 @@ var _hud: Label
 var _free_mouse := false
 ## The reference figure, moved beside whichever prop is selected.
 var _figure: Node3D
+## The scatter preview, rebuilt on demand rather than kept in sync.
+var _field: Node3D = null
+var _field_size := 9.0
 
 
 func _ready() -> void:
@@ -233,6 +237,7 @@ func _refresh_hud() -> void:
 		"PROP LAB    WASD fly · Q/E down/up · SHIFT faster · ALT cursor · ESC quit",
 		"TAB next prop   [ ] height   ; ' sink/lift   R respin",
 		"ENTER save this prop        P print for world.gd",
+		"G scatter this category as ground   , . patch size",
 		"",
 	]
 	if _items.is_empty():
@@ -253,6 +258,14 @@ func _refresh_hud() -> void:
 		lines.append("ground  %+.3f          %s" % [off, sunk])
 		lines.append("        %s" % ("SAVED" if it["saved"] else
 			"unsaved — press ENTER to keep this size"))
+		if _field != null and is_instance_valid(_field):
+			var n := 0
+			for c in _field.get_children():
+				if c is MultiMeshInstance3D:
+					n += (c as MultiMeshInstance3D).multimesh.instance_count
+			lines.append("")
+			lines.append("scatter field  %d patches at %.0f m  (behind you, "
+				% [n, _field_size] + "%d draw calls)" % _field.get_child_count())
 	_hud.text = "\n".join(lines)
 
 
@@ -300,6 +313,18 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nudge(1)
 			KEY_ENTER, KEY_KP_ENTER:
 				_save()
+			KEY_G:
+				_toggle_field()
+			KEY_COMMA:
+				_field_size = maxf(2.0, _field_size - 1.0)
+				if _field != null:
+					_toggle_field()
+					_toggle_field()
+			KEY_PERIOD:
+				_field_size = minf(40.0, _field_size + 1.0)
+				if _field != null:
+					_toggle_field()
+					_toggle_field()
 			KEY_R:
 				if not _items.is_empty():
 					_items[_sel]["node"].rotation.y = randf() * TAU
@@ -423,3 +448,24 @@ func _print_line() -> void:
 	print('  var p := Props.spawn_solid("%s", %.1f, 0.0, _rng)'
 		% [it["category"], it["height"]])
 	print("")
+
+
+## Lays a scatter field around the origin using the selected prop's category,
+## so a ground set can be judged as a surface rather than one patch at a time.
+## Patches only look right in company — a single one tells you nothing about
+## whether ten of them read as a floor.
+func _toggle_field() -> void:
+	if _field != null and is_instance_valid(_field):
+		_field.queue_free()
+		_field = null
+		_refresh_hud()
+		return
+	if _items.is_empty():
+		return
+	var it: Dictionary = _items[_sel]
+	_field = Scatter.scatter(self, String(it["category"]), 34.0,
+		_field_size, 1.5)
+	if _field != null:
+		# Away from the prop row, so the two can be compared side by side.
+		_field.position = Vector3(float(it["x"]), 0, -46.0)
+	_refresh_hud()

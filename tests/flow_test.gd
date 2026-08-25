@@ -74,8 +74,27 @@ func _ready() -> void:
 	for i in Game.needed():
 		Game.add_drop(1)
 	await _wait(20)
-	await _shot("ui-07-victory")
-	_check("victory", Game.state == Game.State.VICTORY)
+
+	# The last world no longer jumps straight to a results screen. It enters
+	# OUTRO — the win cutscene — with the tree still running, and only reaches
+	# VICTORY once the camera move finishes.
+	_check("outro starts", Game.state == Game.State.OUTRO)
+	_check("outro leaves the tree running", not get_tree().paused)
+	await _shot("ui-07-outro")
+
+	# Wait it out rather than forcing the state, so this actually covers the
+	# cutscene completing on its own.
+	var waited := 0
+	while Game.state == Game.State.OUTRO and waited < 900:
+		await get_tree().process_frame
+		waited += 1
+	# The results screen fades its panels in over about two seconds. Shooting
+	# on the state change catches a blank frame.
+	await _wait(150)
+	await _shot("ui-08-victory")
+	_check("victory after the outro (%d frames)" % waited,
+		Game.state == Game.State.VICTORY)
+	_check("victory pauses", get_tree().paused)
 
 	Game.to_menu()
 	await _wait(50)

@@ -20,7 +20,10 @@ extends CanvasLayer
 @onready var _b3: Button = %Button3
 @onready var _b4: Button = %Button4
 
+const VictoryScreen := preload("res://scripts/ui_victory.gd")
+
 var player: Node = null
+var _victory: Control = null
 var _banner_t := 0.0
 var _hurt_t := 0.0
 
@@ -147,11 +150,15 @@ One more stop." % [w.ingredient_needed, w.ingredient], [
 				["NEXT WORLD", Game.next_world],
 				["LEVEL SELECT", Game.to_select],
 				["MAIN MENU", Game.to_menu]])
+		Game.State.OUTRO:
+			# The camera move owns the screen. Everything chrome-like gets out
+			# of the way, and the tree is NOT paused, so the scene plays on.
+			_overlay.visible = false
+			_banner_t = 0.0
+			_banner.modulate.a = 0.0
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		Game.State.VICTORY:
-			_open("SHOPPING DONE", "Everything on the list.
-Time to go home.", [
-				["LEVEL SELECT", Game.to_select],
-				["MAIN MENU", Game.to_menu]])
+			_show_victory()
 		Game.State.DEAD:
 			_open("SCRAPPED", "She is going to be furious.", [
 				["RETRY WORLD", Game.retry_world],
@@ -174,11 +181,15 @@ COLLECT  %s   %d / %d" % [
 
 
 func _open(title: String, message: String, buttons: Array) -> void:
+	if _victory != null and is_instance_valid(_victory):
+		_victory.queue_free()
+		_victory = null
 	_overlay.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	# Kill any world-intro banner, or it reads through the dim behind the title.
 	_banner_t = 0.0
 	_banner.modulate.a = 0.0
+	_title.visible = true
 	_title.text = title
 	_msg.text = message
 	_msg.visible = message != ""
@@ -200,3 +211,45 @@ func _wire(b: Button, label: String, cb: Callable) -> void:
 	b.text = label
 	if b.visible and cb.is_valid():
 		b.pressed.connect(cb)
+
+
+## The results screen, drawn over the final frame of the outro.
+##
+## Built fresh each time rather than kept hidden: it computes grades once in
+## build() and never recomputes, so a stale instance would show the previous
+## run's rank for the first frame.
+func _show_victory() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Kill the banner outright. Zeroing its timer is not enough — the tree is
+	# paused from here on, so nothing ticks the fade and whatever it was
+	# showing would sit on top of the crest forever.
+	_banner_t = 0.0
+	_banner.modulate.a = 0.0
+	_banner.text = ""
+	if _victory != null and is_instance_valid(_victory):
+		_victory.queue_free()
+	_victory = VictoryScreen.new()
+	_victory.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_victory)
+	var w: Resource = Game.current_world()
+	_victory.build({
+		"time": Game.run_time,
+		"kills": Game.run_kills,
+		"dealt": Game.damage_dealt,
+		"taken": Game.damage_taken,
+		"combo": Game.max_combo,
+		"potions": Game.potions_used,
+		"potion_cap": 5,
+		"collected": Game.collected,
+		"needed": Game.needed(),
+	}, w.display_name if w != null else "")
+
+	_victory.chose.connect(func(what: String) -> void:
+		if what == "select":
+			Game.to_select()
+		else:
+			Game.to_menu())
+
+	# The shared overlay stays out of this entirely — it centres its rows, and
+	# on this layout that puts the buttons through the middle of the crest.
+	_overlay.visible = false

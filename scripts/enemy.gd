@@ -764,6 +764,25 @@ func take_damage(amount: float, from: Vector3, knockback: float) -> void:
 		_set_state(State.STAGGER)
 
 
+## Ends this creature for the outro: it drops where it stands and stays there.
+##
+## Not _die(): no meat, no quota, no dissolve. The victory shot wants bodies on
+## the ground, and a field that unmakes itself over two seconds leaves the hero
+## standing in an empty circle by the time the camera arrives.
+func lay_down() -> void:
+	if state == State.DEAD:
+		return
+	_release_token()
+	_set_state(State.DEAD)
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	role = Role.DONE
+	_travel(_death_anim)
+	Sfx.play_at(&"death", global_position + Vector3.UP * 1.2, -6.0)
+	Vfx.dust(global_position + Vector3.UP * 0.15, 6)
+
+
 func _die() -> void:
 	_release_token()
 	_set_state(State.DEAD)

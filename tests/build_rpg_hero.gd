@@ -32,6 +32,10 @@ const MAP := {
 	"attack3": ["UnarmedAttackR3", false, 0.85],
 	"hit": ["UnarmedGetHitF1", false, 1.0],
 	"death": ["UnarmedDeath1", false, 1.0],
+	# The outro pose. This pack has no victory or cheer clip; Boost1 is a
+	# planted, braced power stance, which reads as "still standing" — right for
+	# a robot who was only ever here to do the shopping.
+	"victory": ["UnarmedBoost1", true, 0.85],
 }
 
 const LOCOMOTION := ["walk", "run", "sprint"]
@@ -92,7 +96,8 @@ func _ready() -> void:
 	bs.add_blend_point(_clip("sprint"), _speeds["sprint"], -1, "sprint")
 	sm.add_node("locomotion", bs, Vector2(340, 40))
 
-	var states := ["jump", "fall", "land", "dodge", "attack1", "attack2", "attack3", "hit", "death"]
+	var states := ["jump", "fall", "land", "dodge", "attack1", "attack2", "attack3",
+		"hit", "death", "victory"]
 	var x := 60
 	var y := 220
 	for s in states:
@@ -107,7 +112,7 @@ func _ready() -> void:
 	all.append("locomotion")
 	var n := 0
 	for from in all:
-		if from == "death":
+		if from == "death" or from == "victory":
 			continue
 		for to in all:
 			if from != to:

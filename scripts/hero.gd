@@ -130,6 +130,8 @@ var power := 1.0
 ## while you stand around waiting for the storm.
 var charge := 0.0
 var _charge_fx: Node3D = null
+## True once the outro has posed the robot; freezes the animation state machine.
+var _posing := false
 
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
@@ -476,7 +478,9 @@ func _resolve_swing() -> void:
 			continue
 
 		_swing_hit.append(e)
-		e.take_damage(float(def["damage"]) * power * (1.0 + charge), global_position, float(def["knock"]) * power)
+		var dealt: float = float(def["damage"]) * power * (1.0 + charge)
+		e.take_damage(dealt, global_position, float(def["knock"]) * power)
+		Game.note_damage_dealt(dealt)
 		landed = true
 
 		var contact: Vector3 = global_position.lerp(e.global_position, 0.62) + Vector3.UP * 1.1
@@ -516,6 +520,15 @@ func _resolve_swing() -> void:
 
 ## Called by the storm when lightning finds the player. Does not stack: a
 ## second strike before you land a hit refreshes rather than doubles.
+## Locks into the outro pose. Called every frame by the outro rather than once,
+## so a stray state change during the camera move cannot knock the robot back
+## into an idle halfway through the shot.
+func pose_victory() -> void:
+	velocity = Vector3.ZERO
+	_posing = true
+	_travel("victory")
+
+
 func charge_next_hit(amount: float) -> void:
 	if not alive:
 		return
@@ -576,6 +589,7 @@ func take_damage(amount: float, _from: Vector3) -> void:
 	if not alive or _invuln > 0.0:
 		return
 	health = maxf(0.0, health - amount)
+	Game.note_damage_taken(amount)
 	_invuln = 0.55
 	add_trauma(0.55)
 	hit_stop(0.05)
@@ -663,8 +677,9 @@ func _use_health_orb() -> void:
 		return
 	health_orbs -= 1
 	health = minf(max_health, health + health_orb_restore)
+	Game.note_potion()
 	orbs_changed.emit(health_orbs, max_health_orbs)
-	Sfx.play_at(&"morph" if false else &"impact_light", global_position + Vector3.UP, -4.0)
+	Sfx.play_at(&"impact_light", global_position + Vector3.UP, -4.0)
 	Vfx.morph(global_position + Vector3.UP * 1.1)
 
 
@@ -686,6 +701,11 @@ func _travel(state: String) -> void:
 
 
 func _update_animation(just_jumped: bool) -> void:
+	# The outro owns the pose once it starts. Without this the normal state
+	# machine reasserts an idle on the very next frame and the robot drops out
+	# of its stance mid-shot.
+	if _posing:
+		return
 	if not alive:
 		_travel("death")
 		return

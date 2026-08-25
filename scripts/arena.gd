@@ -12,6 +12,7 @@ const EnemyScript := preload("res://scripts/enemy.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
 const SkySetup := preload("res://scripts/sky_setup.gd")
 const StormScript := preload("res://scripts/storm.gd")
+const OutroScript := preload("res://scripts/outro.gd")
 
 # Archetype ids, matching Enemy.ARCHETYPES.
 const HUSK := 0
@@ -48,6 +49,7 @@ var _l3_giant_a := -1
 # --- level 4 ---
 ## Stays scripted forever: reinforcement is the level's rule, not an opening.
 var _handover := false
+var _outro: Node3D = null
 var _l4_warrok: Node = null
 var _l4_mediums: Array = []
 var _l4_surged := false
@@ -63,6 +65,13 @@ func _ready() -> void:
 	_apply_mood()
 	var w: Resource = Game.current_world()
 	_scripted = w != null and w.scripted
+	# The outro node exists from the start but does nothing until the last
+	# drop lands — building it at that moment would mean instancing a camera on
+	# the same frame the fight ends.
+	_outro = OutroScript.new()
+	add_child(_outro)
+	Game.state_changed.connect(_on_game_state)
+
 	if w != null and w.storm_on:
 		# Level 4 only. The storm needs the player to know who to charge.
 		var storm: Node3D = StormScript.new()
@@ -786,3 +795,9 @@ func _spawn_pickup(at: Vector3, health := false) -> void:
 		var w: Resource = Game.current_world()
 		if w:
 			p.color = w.accent_color.lightened(0.25)
+
+
+## Starts the win cutscene the moment the world flips to OUTRO.
+func _on_game_state(st: int) -> void:
+	if st == Game.State.OUTRO and _outro != null:
+		_outro.begin(player)

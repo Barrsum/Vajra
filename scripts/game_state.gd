@@ -5,7 +5,11 @@ extends Node
 ## what has been collected, and whether we are playing, paused or finished.
 ## Everything else is free to be rebuilt per scene.
 
-enum State { MENU, PLAYING, PAUSED, WORLD_CLEAR, VICTORY, DEAD }
+## OUTRO sits between PLAYING and VICTORY. The tree stays UNPAUSED through it —
+## that is the whole point: the win is a camera move over the live scene, not a
+## cut to a screen. VICTORY is what pauses, and by then the last rendered frame
+## is already the pose the results panel sits on top of.
+enum State { MENU, PLAYING, PAUSED, WORLD_CLEAR, VICTORY, DEAD, OUTRO }
 
 signal state_changed(state: State)
 signal collected_changed(have: int, need: int)
@@ -31,6 +35,17 @@ var worlds: Array = []
 var state := State.MENU
 var world_index := 0
 var collected := 0
+
+## Per-run stats, for the results screen. Reset on entering a world, not on
+## the whole session — the screen reports the run you just played.
+var run_time := 0.0
+var run_kills := 0
+var damage_dealt := 0.0
+var damage_taken := 0.0
+var max_combo := 0
+var potions_used := 0
+var _combo := 0
+var _combo_t := 0.0
 var total_kills := 0
 ## Highest world reached. Everything up to and including this is playable, so
 ## testing a later level never means replaying the earlier ones.
@@ -273,6 +288,48 @@ func current_world() -> Resource:
 	return worlds[clampi(world_index, 0, worlds.size() - 1)]
 
 
+func _process(delta: float) -> void:
+	if state != State.PLAYING and state != State.OUTRO:
+		return
+	run_time += delta
+	# A combo is a chain of landed hits with no long gap. Two seconds is
+	# generous enough that repositioning mid-fight does not break it, tight
+	# enough that it is not just a kill counter.
+	if _combo > 0:
+		_combo_t -= delta
+		if _combo_t <= 0.0:
+			_combo = 0
+
+
+func note_damage_dealt(amount: float) -> void:
+	damage_dealt += amount
+	_combo += 1
+	_combo_t = 2.0
+	max_combo = maxi(max_combo, _combo)
+
+
+func note_damage_taken(amount: float) -> void:
+	damage_taken += amount
+	# Being hit ends the chain. That is what makes a high combo mean something
+	# beyond "the fight went on a while".
+	_combo = 0
+
+
+func note_potion() -> void:
+	potions_used += 1
+
+
+func _reset_run_stats() -> void:
+	run_time = 0.0
+	run_kills = 0
+	damage_dealt = 0.0
+	damage_taken = 0.0
+	max_combo = 0
+	potions_used = 0
+	_combo = 0
+	_combo_t = 0.0
+
+
 func needed() -> int:
 	var w := current_world()
 	return w.ingredient_needed if w else 0
@@ -343,6 +400,7 @@ func reset_progress() -> void:
 
 func _enter_world() -> void:
 	collected = 0
+	_reset_run_stats()
 	_set_state(State.PLAYING)
 	get_tree().paused = false
 	get_tree().change_scene_to_file(GAME_SCENE)
@@ -358,17 +416,28 @@ func add_drop(amount := 1) -> bool:
 	if state != State.PLAYING:
 		return false
 	total_kills += 1
+	run_kills += 1
 	collected = mini(collected + amount, needed())
 	collected_changed.emit(collected, needed())
 	if collected >= needed():
 		_mark_cleared(world_index)
 		if is_last_world():
-			_set_state(State.VICTORY)
+			# No pause. The arena runs the outro over a live scene and calls
+			# finish_outro() when the camera has come to rest.
+			_set_state(State.OUTRO)
 		else:
 			_set_state(State.WORLD_CLEAR)
-		get_tree().paused = true
+			get_tree().paused = true
 		return true
 	return false
+
+
+## Called by the outro once the camera move is done and the robot is posed.
+func finish_outro() -> void:
+	if state != State.OUTRO:
+		return
+	_set_state(State.VICTORY)
+	get_tree().paused = true
 
 
 func next_world() -> void:

@@ -1,4 +1,11 @@
 extends Node
+## NOT the builder the game uses. hero.tscn loads its model, library and tree
+## from the RPG pack via tests/build_rpg_hero.gd — this one writes to
+## res://assets/quaternius/hero_*, which nothing references.
+##
+## Kept because the UAL rig is the fallback if the RPG pack is ever dropped,
+## but edits here do NOT reach the running game. That cost an hour once: a clip
+## added here appeared in its output file and never in the game.
 ## Builds the player animation library and state machine from Quaternius' UAL
 ## (CC0). One rig, one animator, one coherent set — which is the actual fix for
 ## the jankiness. Our previous clips were unrelated Mixamo downloads whose start

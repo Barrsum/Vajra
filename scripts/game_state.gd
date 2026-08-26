@@ -227,8 +227,12 @@ func _build_default_worlds() -> void:
 	ocean.moon_energy = 0.0
 
 	ocean.glow_intensity = 0.50
-	ocean.ground_color = Color(0.40, 0.38, 0.33)
-	ocean.prop_color = Color(0.38, 0.37, 0.34)
+	# Warmed toward the desert set. The base ground shows through everywhere
+	# the scattered patches do not reach, so it has to already be the right
+	# colour rather than something the patches are expected to hide.
+	ocean.ground_color = Color(0.62, 0.52, 0.38)
+	ocean.prop_color = Color(0.50, 0.42, 0.32)
+	ocean.prop_set = "desert"
 	ocean.accent_color = Color(0.35, 0.55, 0.58)
 	ocean.aerial_perspective = 0.45
 	ocean.arena_size = 130.0

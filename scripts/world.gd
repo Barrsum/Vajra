@@ -372,9 +372,16 @@ func _ocean() -> void:
 	# the same shader, saying something completely different.
 	var dead := Foliage.make_material(
 		Color(0.58, 0.52, 0.36), Color(0.44, 0.40, 0.35))
-	for i in 3:
-		_tree(_spot(15.0, 18.0), _rng.randf_range(8.0, 14.0),
-			_rng.randf_range(3.0, 5.0), dead, 3)
+	# The dead trees stay only while nothing generated replaces them: a
+	# low-poly blob standing among photoscanned rock reads as unfinished, not
+	# as a different art style.
+	var dressed: bool = _prop_set() != "" and not OS.has_environment("VAJRA_NO_DRESS")
+	for i in (0 if dressed else 3):
+		_procedural_trees.append(_tree(_spot(15.0, 18.0),
+			_rng.randf_range(8.0, 14.0), _rng.randf_range(3.0, 5.0), dead, 3))
+
+	if dressed:
+		_dress(_half * 0.88, 6.0)
 
 
 ## Level 4: a night garden.
@@ -583,7 +590,7 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			continue
 		var g := Scatter.scatter(self, key + "_ground", _half * 0.98,
 			16.0, 1.35 if key == set_id else 0.4, _rng, 0.15, 0.0, [], true,
-			key == set_id)
+			key == set_id, 1600 if key == set_id else 400)
 		if g != null:
 			g.name = key.capitalize() + "Ground"
 
@@ -687,7 +694,7 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			continue
 		var b := Scatter.scatter(self, key + "_bush", _half * 0.90,
 			2.2, 0.34 if key == set_id else 0.14, _rng, 0.12, 14.0,
-			keep_out, true)
+			keep_out, true, false, 900 if key == set_id else 300)
 		if b != null:
 			b.name = key.capitalize() + "Bushes"
 
@@ -760,30 +767,49 @@ func _sets(own: String, extra: String) -> Array:
 	return [own, extra]
 
 
-## Floating islands overhead.
+## Sky islands overhead, and a drift of smaller rocks around them.
 ##
-## Placed high and wide rather than densely: they are skyline, and the moment
-## one is close enough to read as reachable the player will try to reach it.
-## Spread across a band well outside the arena so they frame it instead of
-## hanging over the fight.
+## Nine islands read as an archipelago the player was meant to be able to
+## reach. Two or three read as landmarks — a broken piece of somewhere else,
+## far off, not a route. The count is the whole difference between "there is
+## more world above you" and "why can I not get up there".
+##
+## The rocks do the volume instead. They are small enough to read as debris
+## rather than destinations, so scattering a dozen fills the sky without
+## making any single one look like a platform.
 func _sky_islands(set_id: String) -> void:
-	var count := 9
+	# --- the islands themselves ---------------------------------------------
+	var count := 2 if _rng.randf() < 0.5 else 3
 	for i in count:
-		var a := TAU * float(i) / float(count) + _rng.randf_range(-0.35, 0.35)
-		var r: float = _half * _rng.randf_range(0.75, 1.55)
-		var size := _rng.randf_range(14.0, 34.0)
-		# No collision: an island you can land on is a platform, and this level
-		# has no way up to one.
+		var a := TAU * float(i) / float(count) + _rng.randf_range(-0.5, 0.5)
+		var r: float = _half * _rng.randf_range(0.95, 1.5)
+		var size := _rng.randf_range(22.0, 38.0)
+		# No collision: an island you can land on is a platform, and this
+		# level has no way up to one.
 		var isle := Props.spawn(set_id + "_sky", size, _rng)
 		if isle == null:
 			continue
 		add_child(isle)
 		isle.position = Vector3(
-			cos(a) * r,
-			_rng.randf_range(34.0, 62.0),
-			sin(a) * r)
-		# Tipped, because a flat-bottomed slab reads as a floor tile in the
-		# sky. A few degrees is enough to say "this is a broken piece of
-		# something".
+			cos(a) * r, _rng.randf_range(40.0, 66.0), sin(a) * r)
+		# Tipped, because a flat-bottomed slab reads as a floor tile in the sky.
 		isle.rotation.x = _rng.randf_range(-0.16, 0.16)
 		isle.rotation.z = _rng.randf_range(-0.16, 0.16)
+
+	# --- the debris around them ---------------------------------------------
+	if not Props.has_any(set_id + "_skyrock"):
+		return
+	for i in 14:
+		var a := _rng.randf() * TAU
+		var r: float = _half * _rng.randf_range(0.5, 1.6)
+		var size := _rng.randf_range(3.0, 11.0)
+		var rock := Props.spawn(set_id + "_skyrock", size, _rng)
+		if rock == null:
+			continue
+		add_child(rock)
+		rock.position = Vector3(
+			cos(a) * r, _rng.randf_range(22.0, 70.0), sin(a) * r)
+		# Tumbled every which way. These are debris; anything level about them
+		# would read as placed.
+		rock.rotation = Vector3(
+			_rng.randf() * TAU, _rng.randf() * TAU, _rng.randf() * TAU)

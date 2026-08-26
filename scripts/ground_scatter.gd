@@ -33,6 +33,14 @@ const Props := preload("res://scripts/props.gd")
 ## `avoid` is a list of Vector3(x, z, radius) keep-out circles — campfires,
 ## spawn points, anywhere a prop standing in the way would be a gameplay
 ## problem rather than a decoration.
+## `tri_budget` caps the total triangles this field may draw, in thousands.
+##
+## Density alone stopped working once sets arrived at different weights: the
+## snow assets are 20k triangles each, the desert ones 40k, so the same density
+## produced a level twice as heavy without a line changing. A budget is the
+## thing that was actually meant — how much of the frame this field may cost —
+## and it self-corrects as assets change.
+##
 ## `solid` gives every patch exact trimesh collision on the scenery layer, so
 ## the small rocks moulded into a ground patch are things you step over rather
 ## than through. The shape is shared per source mesh — ninety separate ones
@@ -40,7 +48,7 @@ const Props := preload("res://scripts/props.gd")
 static func scatter(parent: Node3D, category: String, radius: float,
 		patch_size := 9.0, density := 1.4, rng: RandomNumberGenerator = null,
 		sink := 0.06, inner := 0.0, avoid: Array = [],
-		square := false, solid := false) -> Node3D:
+		square := false, solid := false, tri_budget := 0) -> Node3D:
 	var paths := Props.list(category)
 	if paths.is_empty():
 		return null
@@ -56,6 +64,16 @@ static func scatter(parent: Node3D, category: String, radius: float,
 	var total := int(area / 100.0 * density)
 	if total <= 0:
 		return root
+
+	if tri_budget > 0:
+		var per := _tris_of(String(paths[0]))
+		if per > 0:
+			var allowed: int = maxi(4, int(tri_budget * 1000.0 / float(per)))
+			if allowed < total:
+				print("[scatter] %s: %d -> %d instances (%dk tri budget, "
+					% [category, total, allowed, tri_budget]
+					+ "%d per instance)" % per)
+				total = allowed
 
 	# Instances are grouped by mesh, because a MultiMesh holds exactly one.
 	# More unique patches means more draw calls but far less visible repeat;
@@ -228,6 +246,30 @@ static func plan(box: AABB, spots: Array, patch_size: float,
 		var y: float = -box.position.y * s - sink * patch_size + stagger
 		out.append(Transform3D(basis, Vector3(at.x, y, at.y)))
 	return out
+
+
+## Triangle count of one instance, cached per path.
+static var _tri_counts := {}
+
+
+static func _tris_of(path: String) -> int:
+	if _tri_counts.has(path):
+		return _tri_counts[path]
+	var packed: PackedScene = load(path)
+	var n := 0
+	if packed != null:
+		var probe: Node3D = packed.instantiate()
+		var mi := _first_mesh(probe)
+		if mi != null:
+			for si in mi.mesh.get_surface_count():
+				var arr := mi.mesh.surface_get_arrays(si)
+				if arr.is_empty():
+					continue
+				var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+				n += (idx.size() / 3) if idx.size() > 0 else 					((arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3)
+		probe.free()
+	_tri_counts[path] = n
+	return n
 
 
 static func _first_mesh(n: Node) -> MeshInstance3D:

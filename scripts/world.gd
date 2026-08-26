@@ -338,29 +338,35 @@ func _cave() -> void:
 
 
 func _ocean() -> void:
+	# This world was written as a wet shallows. The desert set makes it a dry
+	# one, so the things that said "water" go: a translucent blue plane over
+	# the whole arena turned every generated patch grey-blue, and the sandbars
+	# under it read as flat beige cards from any height.
+	var dressed: bool = _prop_set() != "" and not OS.has_environment("VAJRA_NO_DRESS")
 	var wet := _mat(_ground_color().lightened(0.05), 0.55)
 	var stone := _mat(_prop_color(), 0.92)
 
-	# A shallow water plane just above the floor, and haze-blue beyond the edge.
-	var water := _mat(_accent_color(), 0.15, 0.0)
-	water.albedo_color.a = 0.55
-	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var wm := MeshInstance3D.new()
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(_size * 6.0, _size * 6.0)
-	wm.mesh = pm
-	wm.material_override = water
-	add_child(wm)
-	wm.position = Vector3(0, 0.12, 0)
+	if not dressed:
+		# A shallow water plane just above the floor.
+		var water := _mat(_accent_color(), 0.15, 0.0)
+		water.albedo_color.a = 0.55
+		water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		var wm := MeshInstance3D.new()
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(_size * 6.0, _size * 6.0)
+		wm.mesh = pm
+		wm.material_override = water
+		add_child(wm)
+		wm.position = Vector3(0, 0.12, 0)
 
 	# Sandbars: low wide slabs the fight happens on.
-	for i in 26:
+	for i in (0 if dressed else 26):
 		var p := _spot(5.0, 7.0)
 		_box(Vector3(_rng.randf_range(4.0, 12.0), _rng.randf_range(0.3, 0.9),
 			_rng.randf_range(4.0, 12.0)), p + Vector3(0, 0.2, 0), wet, false, _rng.randf() * TAU)
 
-	# Rock stacks and driftwood.
-	for i in 30:
+	# Rock stacks and driftwood — replaced by the generated boulders.
+	for i in (0 if dressed else 30):
 		var p := _spot(6.0, 10.0)
 		var h := _rng.randf_range(1.5, 7.0)
 		_box(Vector3(_rng.randf_range(1.5, 4.0), h, _rng.randf_range(1.5, 4.0)),
@@ -375,7 +381,6 @@ func _ocean() -> void:
 	# The dead trees stay only while nothing generated replaces them: a
 	# low-poly blob standing among photoscanned rock reads as unfinished, not
 	# as a different art style.
-	var dressed: bool = _prop_set() != "" and not OS.has_environment("VAJRA_NO_DRESS")
 	for i in (0 if dressed else 3):
 		_procedural_trees.append(_tree(_spot(15.0, 18.0),
 			_rng.randf_range(8.0, 14.0), _rng.randf_range(3.0, 5.0), dead, 3))

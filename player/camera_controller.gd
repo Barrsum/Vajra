@@ -50,9 +50,21 @@ func _process(delta: float) -> void:
 		_aim_target = _camera_raycast.global_transform * _camera_raycast.target_position
 		_aim_collider = null
 
-	# Set camera controller to current ground level for the character
+	# Follow the character, and follow the ground under it.
+	#
+	# The height still comes from the ground probe rather than from the
+	# character directly: locking the camera to the body would make it bob with
+	# every jump and every hitch in the terrain, which is what the probe exists
+	# to smooth out. What changed is that the probe now SEES the terrain — it
+	# was masked to the flat world plane, so on a boulder the camera stayed at
+	# the height of the ground far below and the player climbed out of frame.
+	#
+	# The follow is also frame-rate independent now. A flat 0.1 per frame means
+	# the camera chases twice as fast at 120fps as at 60, which reads as the
+	# game feeling different on different machines.
 	var target_position := _anchor.global_position + _offset
-	target_position.y = lerp(global_position.y, _anchor._ground_height, 0.1)
+	var follow: float = 1.0 - pow(0.001, delta)   # ~10 per second
+	target_position.y = lerp(global_position.y, _anchor._ground_height, follow)
 	global_position = target_position
 
 	# Rotates camera using euler rotation

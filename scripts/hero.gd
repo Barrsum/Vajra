@@ -134,10 +134,17 @@ var charge := 0.0
 var _charge_fx: Node3D = null
 ## True once the outro has posed the robot; freezes the animation state machine.
 var _posing := false
-## How high a lip the robot walks over rather than stopping at. Roughly a
-## quarter of its height: enough for the stones and twigs moulded into ground
-## patches, not enough to walk up the side of a boulder.
-const STEP_HEIGHT := 0.45
+## How long the robot has been trying to move and failing.
+var _wedged := 0.0
+## How high a lip the robot walks over rather than stopping at.
+##
+## No animation is played for it — the robot simply rises, the way it would
+## over any small rise in the ground. 0.8m is high for a 1.8m character by the
+## usual rules, and right here: ground patches are scaled 16x, so a 15cm stone
+## in the source mesh becomes a lump well over a metre before sinking. Boulders
+## are 3m and up and tree collision is a vertical cylinder, so neither becomes
+## climbable at this height.
+const STEP_HEIGHT := 0.8
 
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
@@ -242,10 +249,21 @@ func _physics_process(delta: float) -> void:
 	_invuln = maxf(0.0, _invuln - delta)
 	_land_timer = maxf(0.0, _land_timer - delta)
 
-	# Ground probe for the camera. Straight from their controller.
+	# Ground probe for the camera.
+	#
+	# Rewritten from GDQuest's version, which took maxf against the PREVIOUS
+	# frame's value and never reset it. On their flat street that behaves; on
+	# terrain it ratchets — the camera rises onto a boulder and then refuses to
+	# come down until the player is physically below the height it latched.
+	#
+	# The probe's mask also had to change. It was world-only, so it could not
+	# see the ground patches or the rocks the player now stands on, and the
+	# camera stayed at the height of the flat plane underneath everything.
 	if _ground_shapecast.get_collision_count() > 0:
+		var found := -INF
 		for r in _ground_shapecast.collision_result:
-			_ground_height = maxf(_ground_height, r.point.y)
+			found = maxf(found, r.point.y)
+		_ground_height = found
 	else:
 		_ground_height = global_position.y + _ground_shapecast.target_position.y
 	if global_position.y < _ground_height:
@@ -345,6 +363,8 @@ func _physics_process(delta: float) -> void:
 	# Their unstick: if we had velocity but went nowhere, nudge off the wall.
 	if (global_position - before).length() < 0.001 and velocity.length() > 0.001:
 		global_position += get_wall_normal() * 0.1
+
+	_escape(delta, before)
 
 	planar_speed = Vector2(velocity.x, velocity.z).length()
 	_update_animation(is_just_jumping)
@@ -824,3 +844,39 @@ func _find_skeleton(n: Node) -> Skeleton3D:
 		if r:
 			return r
 	return null
+
+
+## Last-resort escape from geometry.
+##
+## The usual cause was a bug — collision cylinders scaled twelve times too
+## large, so trees carried invisible pillars that overlapped in open ground.
+## That is fixed. This stays because generated collision is trimesh built from
+## meshes nobody authored for physics, and a seam that traps a capsule is the
+## kind of thing that turns up on the twentieth asset rather than the first.
+##
+## Deliberately not a jump: no animation, no input, no cooldown to learn. If
+## the robot has genuinely been unable to move for a third of a second while
+## asking to, it is lifted clear and pushed the way it wanted to go. A player
+## who never gets stuck will never know this exists, which is the point.
+func _escape(delta: float, before: Vector3) -> void:
+	var wants := Vector3(velocity.x, 0.0, velocity.z)
+	if not alive or wants.length() < 0.5:
+		_wedged = 0.0
+		return
+	# Moving at all, however slowly, is not wedged — sliding along a wall is
+	# normal and must not trigger this.
+	if (global_position - before).length() > 0.004:
+		_wedged = 0.0
+		return
+
+	_wedged += delta
+	if _wedged < 0.35:
+		return
+	_wedged = 0.0
+
+	# Up first, then along. Up alone leaves the robot standing on whatever it
+	# was caught in; along alone drives it deeper into the same seam.
+	global_position += Vector3.UP * (STEP_HEIGHT * 0.75)
+	global_position += wants.normalized() * 0.4
+	velocity.y = maxf(velocity.y, 2.0)
+	Vfx.dust(global_position + Vector3.UP * 0.1, 6)

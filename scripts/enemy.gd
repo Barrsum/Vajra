@@ -19,7 +19,7 @@ enum State { CHASE, CIRCLE, TELEGRAPH, STRIKE, LINK, RECOVER, STAGGER, DEAD }
 const MAX_TOKENS := 2
 ## Creatures step over the same clutter the player does. Without it they catch
 ## on twigs and stand there swinging at a rock.
-const STEP_HEIGHT := 0.5
+const STEP_HEIGHT := 0.85
 static var _tokens := MAX_TOKENS
 
 ## Behaviour archetypes. Variety here is behavioural, not visual — one model,

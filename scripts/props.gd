@@ -232,23 +232,21 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	var body := StaticBody3D.new()
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
-	shape.radius = radius if radius > 0.0 else height * 0.09
-	shape.height = height
+	# Divided by the node's scale, because the body is a CHILD of it.
+	#
+	# spawn_path rescales the prop to the height asked for — a factor of ~12
+	# for a tree — and a CollisionShape3D inherits that. Setting the radius in
+	# metres therefore produced a shape twelve times too big: a 0.54m trunk
+	# became a 6.9m invisible pillar 152m tall. Trees read as "not solid"
+	# because the player stopped seven metres short of the trunk, and open
+	# ground read as "stuck" because those pillars overlap.
+	var inv: float = 1.0 / maxf(node.scale.y, 0.0001)
+	shape.radius = (radius if radius > 0.0 else height * 0.09) * inv
+	shape.height = height * inv
 	col.shape = shape
 	body.add_child(col)
-	col.position = Vector3(0, height * 0.5, 0)
+	col.position = Vector3(0, height * 0.5 * inv, 0)
 
-	# LAYER 4: scenery. Blocks the PLAYER and nothing else.
-	#
-	# Creatures mask layers 1 and 3 (world and each other), so they walk
-	# straight through decoration. That is deliberate. Putting props on the
-	# world layer meant every enemy collided with every tree, and the level 4
-	# grab set-piece stopped resolving — the smasher crossing the arena got
-	# caught on scenery and the throw never happened.
-	#
-	# The trade is a creature occasionally clipping a rock, against enemies
-	# getting stuck on decoration for the rest of the game. In a level meant to
-	# be densely dressed that is not a close call.
 	body.collision_layer = (OBSTACLE_LAYER if blocks_creatures
 		else SCENERY_LAYER)
 	body.collision_mask = 0

@@ -13,7 +13,7 @@ set "GODOT_RUN=%GODOT_EXE%"
 if exist "%GODOT_EXE:.exe=_console.exe%" set "GODOT_RUN=%GODOT_EXE:.exe=_console.exe%"
 
 set FAILED=0
-for %%T in (anim_pool_test tree_test storm_test props_test scatter_test prop_lab_shot level1_test level2_test level3_test level4_test flow_test) do (
+for %%T in (anim_pool_test tree_test storm_test props_test scatter_test dress_test prop_lab_shot level1_test level2_test level3_test level4_test flow_test) do (
 	echo.
 	echo ===== %%T =====
 	"%GODOT_RUN%" --headless --path "%~dp0." res://tests/%%T.tscn

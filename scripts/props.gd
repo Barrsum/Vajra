@@ -126,16 +126,21 @@ static func has_any(category: String) -> bool:
 ## normal case: a world should ask for "a night tree", not restate a number
 ## someone already stood next to it and chose.
 static func spawn(category: String, height := -1.0,
-		rng: RandomNumberGenerator = null, offset := INF) -> Node3D:
+		rng: RandomNumberGenerator = null, offset := INF,
+		default_offset := 0.0) -> Node3D:
 	var paths := list(category)
 	if paths.is_empty():
 		return null
 	var i := (rng.randi() if rng != null else randi()) % paths.size()
-	return spawn_path(paths[i], height, rng, offset)
+	return spawn_path(paths[i], height, rng, offset, default_offset)
 
 
+## `default_offset` is used ONLY when this prop has nothing saved in the lab.
+## A world can say "trees generally want bedding in a little" without
+## overriding a height and sink someone stood next to the asset and chose.
 static func spawn_path(path: String, height := -1.0,
-		rng: RandomNumberGenerator = null, offset := INF) -> Node3D:
+		rng: RandomNumberGenerator = null, offset := INF,
+		default_offset := 0.0) -> Node3D:
 	var packed: PackedScene = load(path)
 	if packed == null:
 		return null
@@ -143,7 +148,7 @@ static func spawn_path(path: String, height := -1.0,
 	if height < 0.0:
 		height = float(cfg["height"])
 	if is_inf(offset):
-		offset = float(cfg["offset"])
+		offset = float(cfg["offset"]) if has_settings(path) else default_offset
 
 	var node: Node3D = packed.instantiate()
 
@@ -182,8 +187,8 @@ static func spawn_path(path: String, height := -1.0,
 ## sides you can run up and stand on.
 static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 		rng: RandomNumberGenerator = null, hull := false,
-		offset := INF) -> Node3D:
-	var node := spawn(category, height, rng, offset)
+		offset := INF, default_offset := 0.0) -> Node3D:
+	var node := spawn(category, height, rng, offset, default_offset)
 	if node == null:
 		return null
 	# The node knows its real height even when -1 was asked for.

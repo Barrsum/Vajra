@@ -604,7 +604,7 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			# into the hollow shell. Bedding it in costs nothing and there is
 			# no such thing as a boulder resting on a point.
 			var rock := Props.spawn_solid(set_id + "_rock", h, 0.0, _rng, true,
-				-0.12)
+				INF, -0.12)
 			if rock == null:
 				continue
 			add_child(rock)
@@ -622,7 +622,7 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			var at := Vector3(cos(a) * r, 0, sin(a) * r)
 			var sh := _rng.randf_range(2.0, 5.0)
 			var srock := Props.spawn_solid(set_id + "_rock", sh, 0.0, _rng, true,
-				-0.14)
+				INF, -0.14)
 			if srock == null:
 				continue
 			add_child(srock)
@@ -654,7 +654,18 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 			# Wide height spread. One tree species repeated is a forest; one
 			# tree SIZE repeated is wallpaper.
 			var h := _rng.randf_range(7.0, 17.0)
-			var t := Props.spawn_solid(set_id + "_tree", h, h * 0.045, _rng)
+			# Bedded in like the rocks, just less.
+			#
+			# A generated tree comes with a slab of ground moulded around its
+			# trunk — snow, soil, roots. Grounding puts the lowest point of
+			# that slab on the floor, which leaves the whole disc sitting ON
+			# the ground like a plinth, with a visible lip all the way round.
+			# 4% of height is about the thickness of that slab.
+			#
+			# Passed as a DEFAULT, not an override: anything tuned in the prop
+			# lab still wins.
+			var t := Props.spawn_solid(set_id + "_tree", h, h * 0.045, _rng,
+				false, INF, -0.04)
 			if t == null:
 				continue
 			add_child(t)

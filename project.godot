@@ -31,7 +31,8 @@ window/stretch/mode="canvas_items"
 3d_physics/layer_1="world"
 3d_physics/layer_2="player"
 3d_physics/layer_3="creatures"
-3d_physics/layer_4="scenery"
+3d_physics/layer_4="ground clutter"
+3d_physics/layer_5="obstacles"
 
 [input]
 

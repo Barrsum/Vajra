@@ -17,6 +17,9 @@ signal died(enemy: Enemy)
 enum State { CHASE, CIRCLE, TELEGRAPH, STRIKE, LINK, RECOVER, STAGGER, DEAD }
 
 const MAX_TOKENS := 2
+## Creatures step over the same clutter the player does. Without it they catch
+## on twigs and stand there swinging at a rock.
+const STEP_HEIGHT := 0.5
 static var _tokens := MAX_TOKENS
 
 ## Behaviour archetypes. Variety here is behavioural, not visual — one model,
@@ -142,6 +145,14 @@ var _hold_dir := Vector3.ZERO
 var _discharged := false
 var _wander_to := Vector3.ZERO
 var _wander_t := 0.0
+## Where we were last physics frame, and for how long we have been there.
+## Creatures have no pathfinding — they walk straight at the player — so an
+## obstacle they cannot step over is one they would otherwise stand against
+## forever.
+var _last_pos := Vector3.ZERO
+var _stuck_t := 0.0
+## Mask to go back to when a scripted role ends.
+var _free_mask := 0
 signal smashed(enemy)
 var drops := 1
 
@@ -180,6 +191,7 @@ var _base_cols: Array[Color] = []
 ## Kept so the dissolve shader can inherit each surface's own texture.
 var _mesh_surfaces: Array = []   # [[MeshInstance3D, surface_index], ...]
 
+const StepClimb := preload("res://scripts/step_climb.gd")
 const DISSOLVE_SHADER := preload("res://shaders/dissolve.gdshader")
 static var _dissolve_noise: NoiseTexture2D = null
 static var _shard_noise: NoiseTexture2D = null
@@ -320,6 +332,7 @@ func _physics_process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 
+	_sync_obstacle_mask()
 	_t += delta
 	_flash = maxf(0.0, _flash - delta * 6.0)
 	_burst_t = maxf(0.0, _burst_t - delta)
@@ -441,6 +454,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y = 0.0
 	move_and_slide()
+	_unstick(delta)
 
 	if dist > 0.05:
 		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
@@ -511,6 +525,7 @@ func _scripted(delta: float, to_player: Vector3, dist: float) -> void:
 	else:
 		velocity.y = 0.0
 	move_and_slide()
+	_unstick(delta)
 
 	if dist > 0.05:
 		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
@@ -587,6 +602,7 @@ func _wander(delta: float) -> void:
 	else:
 		velocity.y = maxf(velocity.y, 0.0)
 	move_and_slide()
+	_unstick(delta)
 
 	if wish.length_squared() > 0.01:
 		_facing = lerp_angle(_facing, atan2(wish.x, wish.z), 1.0 - exp(-4.0 * delta))
@@ -617,6 +633,7 @@ func _spectate(delta: float, to_player: Vector3, dist: float) -> void:
 	else:
 		velocity.y = 0.0
 	move_and_slide()
+	_unstick(delta)
 
 	if dist > 0.05:
 		_facing = lerp_angle(_facing, atan2(to_player.x, to_player.z), 1.0 - exp(-turn_speed * delta))
@@ -986,3 +1003,59 @@ func _apply_materials() -> void:
 		m.emission_energy_multiplier = e
 		# Flash from the material's own colour, so textured skin is preserved.
 		m.albedo_color = _base_cols[i].lerp(Color(1, 0.9, 0.9), _flash * 0.7)
+
+
+## Scripted actors walk through trees; free-roaming ones do not.
+##
+## Creatures have no pathfinding — they walk straight at the player. That is
+## fine for a normal fight, where getting hung up on a trunk for a moment reads
+## as clumsy rather than broken, and the unstick below shakes them loose. It is
+## NOT fine for a set-piece: a smasher told to cross the arena and throw the
+## player stops at the first trunk in the way and the scripted moment simply
+## never fires. Level 2 and level 4 both broke exactly that way.
+##
+## So a creature under scripted direction stops colliding with obstacles for
+## the duration. It is invisible in play — the actor is being watched, not
+## inspected — and it makes the moment reliable.
+func _sync_obstacle_mask() -> void:
+	if state == State.DEAD:
+		return          # _die clears the mask; leave it cleared
+	var scripted: bool = (role != Role.FREE and role != Role.DONE
+		and role != Role.WANDER)
+	var want: int = 5 if scripted else 21
+	if collision_mask != want:
+		collision_mask = want
+
+
+## Step over what can be stepped over, slide around what cannot.
+##
+## Called after every move_and_slide. Creatures are blocked by trunks and
+## boulders now, and without this a monster that walks into one simply stops
+## and stays there — which in level 4 meant the set-piece smasher never
+## crossed the arena and the throw never happened.
+func _unstick(delta: float) -> void:
+	var wanted := Vector3(velocity.x, 0.0, velocity.z)
+	if wanted.length_squared() < 0.04:
+		_stuck_t = 0.0
+		_last_pos = global_position
+		return
+
+	if is_on_wall():
+		StepClimb.climb(self, wanted * delta, STEP_HEIGHT)
+
+	var moved := (global_position - _last_pos).length()
+	_last_pos = global_position
+	# A tenth of what we asked for is not moving.
+	if moved > wanted.length() * delta * 0.1:
+		_stuck_t = 0.0
+		return
+
+	_stuck_t += delta
+	if _stuck_t < 0.25:
+		return
+	_stuck_t = 0.0
+	# Sidestep. Which way is chosen from the circling side already picked for
+	# this creature, so a group jammed on the same rock spreads out rather
+	# than all shuffling the same direction.
+	var side := Vector3(-wanted.z, 0.0, wanted.x).normalized() * _circle_side
+	global_position += side * 0.35

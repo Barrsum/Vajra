@@ -19,8 +19,21 @@ const DIR := "res://assets/props/"
 ## A plain ConfigFile rather than a Resource so it can be read in a diff and
 ## edited by hand when that is faster than opening the lab.
 const SETTINGS := "res://assets/props/props.cfg"
-## Physics layer 4. Scenery the player bumps into and creatures ignore.
+## Physics layer 4. Ground clutter: the player walks over it, creatures ignore
+## it entirely. A creature catching its foot on a twig is a creature standing
+## still swinging at nothing.
 const SCENERY_LAYER := 8
+## Physics layer 5. Real obstacles — trunks, boulders — that stop the player
+## AND creatures, because a monster walking through a tree is what breaks the
+## illusion fastest.
+##
+## Its OWN layer rather than the world layer, so a creature can be told to
+## ignore obstacles without also falling through the floor. Scripted set-piece
+## actors do exactly that: creatures have no pathfinding, so a smasher told to
+## cross the arena and throw the player will stop at the first trunk in the way
+## and the scripted moment never fires. Both level 2 and level 4 broke that way
+## before this layer existed.
+const OBSTACLE_LAYER := 16
 
 ## category -> Array[String] of resource paths. Built once per run.
 static var _cache := {}
@@ -185,9 +198,12 @@ static func spawn_path(path: String, height := -1.0,
 ## an invisible pillar the width of its widest point and slide off. A convex
 ## hull is a few dozen planes, follows the real silhouette, and gives sloped
 ## sides you can run up and stand on.
+## `blocks_creatures` puts the body on the world layer instead of the scenery
+## layer, so monsters are stopped by it too.
 static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 		rng: RandomNumberGenerator = null, hull := false,
-		offset := INF, default_offset := 0.0) -> Node3D:
+		offset := INF, default_offset := 0.0,
+		blocks_creatures := true) -> Node3D:
 	var node := spawn(category, height, rng, offset, default_offset)
 	if node == null:
 		return null
@@ -206,7 +222,8 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 			# step can afford.
 			col.shape = mi.mesh.create_convex_shape(true, true)
 			body.add_child(col)
-			body.collision_layer = SCENERY_LAYER
+			body.collision_layer = (OBSTACLE_LAYER if blocks_creatures
+				else SCENERY_LAYER)
 			body.collision_mask = 0
 			# Under the MeshInstance, so it inherits the same transform the
 			# visible mesh has and cannot drift from it.
@@ -232,7 +249,8 @@ static func spawn_solid(category: String, height := -1.0, radius := 0.0,
 	# The trade is a creature occasionally clipping a rock, against enemies
 	# getting stuck on decoration for the rest of the game. In a level meant to
 	# be densely dressed that is not a close call.
-	body.collision_layer = SCENERY_LAYER
+	body.collision_layer = (OBSTACLE_LAYER if blocks_creatures
+		else SCENERY_LAYER)
 	body.collision_mask = 0
 	node.add_child(body)
 	return node

@@ -17,6 +17,8 @@ extends CharacterBody3D
 ##   - cone hitbox with target assist
 ##   - hit-stop, camera trauma, VFX and SFX
 
+const StepClimb := preload("res://scripts/step_climb.gd")
+
 @export_group("Movement")
 @export var walk_speed := 4.6
 @export var sprint_speed := 8.4
@@ -132,6 +134,10 @@ var charge := 0.0
 var _charge_fx: Node3D = null
 ## True once the outro has posed the robot; freezes the animation state machine.
 var _posing := false
+## How high a lip the robot walks over rather than stopping at. Roughly a
+## quarter of its height: enough for the stones and twigs moulded into ground
+## patches, not enough to walk up the side of a boulder.
+const STEP_HEIGHT := 0.45
 
 ## Set-piece control. `grabbed` freezes input without freezing physics, so the
 ## player still falls and still takes hits — being held has to feel like being
@@ -323,7 +329,19 @@ func _physics_process(delta: float) -> void:
 		add_trauma(0.22)
 
 	var before := global_position
+	var wanted := Vector3(velocity.x, 0.0, velocity.z) * delta
 	move_and_slide()
+
+	# Walk over what should be walked over.
+	#
+	# move_and_slide treats a two-centimetre lip exactly like a wall, and
+	# generated ground has stones moulded into every patch — without this the
+	# robot catches on scenery constantly, which is the worst thing about
+	# moving around a dressed level. STEP_HEIGHT is chosen to clear ground
+	# clutter and still be stopped by a tree trunk or a boulder.
+	if is_on_wall():
+		StepClimb.climb(self, wanted, STEP_HEIGHT)
+
 	# Their unstick: if we had velocity but went nowhere, nudge off the wall.
 	if (global_position - before).length() < 0.001 and velocity.length() > 0.001:
 		global_position += get_wall_normal() * 0.1

@@ -569,6 +569,11 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 	# and that is very visible from the middle. Sunk slightly so the rims bed
 	# into the floor rather than standing on it.
 	#
+	# Sunk 15%, not 10%. A patch is scaled to 16m across and the scale is
+	# uniform, so a 15cm stone moulded into a 1m source becomes a 2.5m lump.
+	# Sinking most of that below the floor is what leaves bumps a character
+	# can step over instead of walls it has to walk around.
+	#
 	# 16m patches rather than more small ones is a triangle-budget decision.
 	# A patch costs ~19k triangles whatever size it is drawn at, so covering
 	# the arena with big ones costs a fraction of covering it with small ones,
@@ -577,7 +582,7 @@ func _dress(path_r: float, path_w: float, keep_out: Array = []) -> void:
 		if not Props.has_any(key + "_ground"):
 			continue
 		var g := Scatter.scatter(self, key + "_ground", _half * 0.98,
-			16.0, 1.35 if key == set_id else 0.4, _rng, 0.10, 0.0, [], true,
+			16.0, 1.35 if key == set_id else 0.4, _rng, 0.15, 0.0, [], true,
 			key == set_id)
 		if g != null:
 			g.name = key.capitalize() + "Ground"

@@ -58,20 +58,27 @@ func _ready() -> void:
 	# --- everything solid is on the scenery layer ---------------------------
 	# Not the world layer. Props there collide with creatures, and the level 4
 	# set-piece stopped resolving when they did.
+	var clutter := 0
+	var obstacles := 0
 	var wrong := 0
-	var solid := 0
 	for n in nodes:
 		if not (n is StaticBody3D):
 			continue
 		var b := n as StaticBody3D
-		# Campfire barriers are deliberately on the world layer: they are meant
-		# to stop creatures too.
 		if b.collision_layer == 1:
-			continue
-		solid += 1
-		if b.collision_layer != Props.SCENERY_LAYER or b.collision_mask != 0:
+			continue            # campfire barriers, deliberately world layer
+		if b.collision_mask != 0:
+			wrong += 1          # scenery must never collide with anything
+		if b.collision_layer == Props.SCENERY_LAYER:
+			clutter += 1
+		elif b.collision_layer == Props.OBSTACLE_LAYER:
+			obstacles += 1
+		else:
 			wrong += 1
-	_check("%d scenery bodies, all player-only" % solid, wrong == 0)
+	# Ground clutter is player-only; trunks and boulders stop creatures too.
+	_check("%d ground clutter, %d obstacles, %d mis-layered"
+		% [clutter, obstacles, wrong], wrong == 0 and clutter > 20
+		and obstacles > 10)
 
 	# --- bedded in ----------------------------------------------------------
 	# Grounding alone leaves a slanted rock balanced on one corner and a tree
